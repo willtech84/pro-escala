@@ -1,0 +1,2638 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+ <title>Gerenciamento SDI</title>
+ <link rel="manifest" href="manifest.json">
+ <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+ <link rel="icon" type="image/png" sizes="64x64" href="icons/favicon.png">
+ <link rel="apple-touch-icon" href="icons/icon-192.png">
+ <meta name="theme-color" content="#1565c0">
+ <meta name="mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-status-bar-style" content="default">
+ <meta name="apple-mobile-web-app-title" content="SDI">
+ <style id="sdi-print-page-css"></style>
+ <script src="https://accounts.google.com/gsi/client" async defer></script>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+ <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+ <style>
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', 'Segoe UI', sans-serif; background: #f0f4f8; min-height: 100vh; padding-bottom: 20px; }
+
+        .app-header { background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%); padding: 16px 16px 20px; color: white; }
+        .header-inner { max-width: 700px; margin: 0 auto; }
+        .header-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .header-brand { display: flex; align-items: center; gap: 12px; }
+        .header-logo { width: 52px; height: 52px; border-radius: 12px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; flex-shrink: 0; }
+        .header-title { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+        .header-subtitle { font-size: 0.7rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+        .header-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .badge-user-pill { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 5px 10px; font-size: 0.75rem; font-weight: 600; color: white; display: none; align-items: center; gap: 5px; }
+        #backup-status { border-radius: 20px; padding: 5px 10px; font-size: 0.75rem; font-weight: 600; color: white; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+        #backup-status.ok      { background: #2e7d32; }
+        #backup-status.saving  { background: #e65100; }
+        #backup-status.error   { background: #c62828; }
+        #backup-status.offline { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); }
+
+        .content-wrap { max-width: 700px; margin: 0 auto; padding: 14px 12px; }
+
+        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+        .btn-action { background: white; border: 1.5px solid #e8edf2; border-radius: 12px; padding: 10px 4px 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all .15s; }
+        .btn-action:active { transform: scale(0.96); background: #f0f4f8; }
+        .btn-action .bi { font-size: 1.35rem; line-height: 1; }
+        .btn-action .bl { font-size: 0.62rem; font-weight: 600; color: #455a64; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2; }
+        .c-blue .bi{color:#1565c0} .c-green .bi{color:#2e7d32} .c-orange .bi{color:#e65100} .c-teal .bi{color:#00695c}
+        .c-violet .bi{color:#4527a0} .c-pink .bi{color:#ad1457} .c-gray .bi{color:#37474f} .c-purple .bi{color:#6a1b9a}
+
+        .prof-card { background: white; border-radius: 12px; border: 1.5px solid #e8edf2; padding: 11px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .prof-card span { font-size: 1.1rem; color: #1565c0; flex-shrink: 0; }
+        .prof-card input { flex: 1; border: none; outline: none; font-size: 0.9rem; font-family: inherit; color: #263238; background: transparent; }
+        .prof-card input::placeholder { color: #90a4ae; }
+
+        .mes-card { background: white; border-radius: 12px; border: 1.5px solid #e8edf2; padding: 11px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .mes-card .mi { font-size: 1.1rem; color: #1565c0; flex-shrink: 0; }
+        .mes-card select { flex: 1; min-width: 120px; border: none; outline: none; font-size: 0.9rem; font-family: inherit; color: #263238; background: transparent; cursor: pointer; }
+        .btn-mes-new { background: #1565c0; color: white; border: none; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 0.75rem; font-weight: 600; white-space: nowrap; font-family: inherit; }
+        .btn-mes-del { background: white; color: #c62828; border: 1.5px solid #ef9a9a; padding: 7px 9px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+
+        .escalas-card { background: #fffde7; border: 1.5px solid #ffe082; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .esc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .esc-title { display: flex; align-items: center; gap: 7px; font-size: 0.75rem; font-weight: 700; color: #5d4037; text-transform: uppercase; letter-spacing: 0.4px; }
+        .esc-badge { background: #ff8f00; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 0.68rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+        .btn-toggle-esc { background: #4e342e; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.72rem; font-weight: 600; font-family: inherit; }
+        .escala-item { display: grid; grid-template-columns: 1fr 90px 1fr 90px 36px; gap: 8px; margin-bottom: 10px; align-items: flex-end; border-bottom: 1px solid #ffe082; padding-bottom: 10px; }
+        @media (max-width: 599px) { .escala-item { grid-template-columns: 1fr 1fr; gap: 6px; } .escala-item >button { grid-column: 1 / -1; justify-self: start; } }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.68rem; font-weight: 700; color: #6d4c41; text-transform: uppercase; letter-spacing: 0.3px; }
+        .form-group input, .form-group select { padding: 8px 10px; border: 1.5px solid #ffe082; border-radius: 8px; font-size: 0.85rem; font-family: inherit; background: white; color: #263238; outline: none; }
+        .form-group input:focus { border-color: #ff8f00; }
+        .btn-add-esc { background: #4e342e; color: white; border: none; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.75rem; font-weight: 600; margin-top: 6px; font-family: inherit; }
+
+        .tabs-bar { display: flex; flex-wrap: wrap; border-bottom: 2px solid #e8edf2; margin-bottom: 14px; gap: 2px; }
+        .tab-btn { padding: 10px 14px; border: none; background: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #78909c; border-bottom: 3px solid transparent; margin-bottom: -2px; font-family: inherit; transition: color .15s; }
+        .tab-btn.active { color: #1565c0; border-bottom-color: #1565c0; }
+        .tab-btn-new { border-bottom: none !important; border-radius: 8px !important; padding: 7px 11px !important; font-size: 0.75rem !important; margin-bottom: 4px !important; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .form-card { background: white; border-radius: 12px; border: 1.5px solid #e8edf2; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .form-card .form-group label { color: #546e7a; }
+        .form-card .form-group input, .form-card .form-group select { border: 1.5px solid #e0e7ef; border-radius: 8px; padding: 9px 11px; font-size: 0.88rem; }
+        .form-card .form-group input:focus { border-color: #1565c0; }
+        .grid-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+        .btn-save { background: #2e7d32; color: white; border: none; padding: 10px 18px; border-radius: 9px; cursor: pointer; font-size: 0.88rem; font-weight: 600; margin-top: 12px; font-family: inherit; }
+        .btn-cancel-form { background: #eceff1; color: #546e7a; border: none; padding: 10px 14px; border-radius: 9px; cursor: pointer; font-size: 0.88rem; font-weight: 600; margin-top: 12px; margin-left: 8px; font-family: inherit; display: none; }
+
+        .tbl-toggle-bar { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 8px; }
+        .tbl-toggle-label { font-size: 0.78rem; font-weight: 700; color: #455a64; }
+        .btn-tbl-toggle { background: #1565c0; color: white; border: none; padding: 5px 12px; border-radius: 7px; cursor: pointer; font-size: 0.72rem; font-weight: 600; font-family: inherit; }
+
+        .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1.5px solid #e8edf2; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th { background: #1565c0; color: white; padding: 9px 8px; text-align: left; font-weight: 600; font-size: 0.72rem; text-transform: uppercase; }
+        td { border-bottom: 1px solid #f0f4f8; padding: 8px; color: #37474f; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f7fafc; }
+        tr.aberta td { background: #fff8e1; }
+        .btn-mini { padding: 4px 8px; border: none; border-radius: 5px; cursor: pointer; color: white; font-size: 0.68rem; font-weight: 600; }
+
+
+        .resumo-card { background: white; border-radius: 12px; border: 1.5px solid #e8edf2; padding: 12px 14px; margin-top: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .resumo-card h4 { font-size: 0.82rem; font-weight: 700; color: #1565c0; margin-bottom: 8px; }
+        .resumo-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f0f4f8; font-size: 0.8rem; color: #455a64; }
+        .resumo-row:last-child { border: none; font-weight: 700; color: #1565c0; }
+        .resumo-total { border: 2px solid #1565c0 !important; }
+        .resumo-total h4 { font-size: 0.9rem !important; }
+
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+        .modal-overlay.active { display: flex; }
+        .modal-box { background: white; border-radius: 16px; padding: 22px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.25); max-height: 90vh; overflow-y: auto; }
+        .modal-box h3 { margin: 0 0 10px; color: #e65100; font-size: 1rem; }
+        .modal-box.danger h3 { color: #c62828; }
+        .modal-box p { margin: 0 0 14px; color: #546e7a; font-size: 0.86rem; line-height: 1.55; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+        .modal-actions button { padding: 9px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: inherit; }
+
+        .hist-lista { max-height: 220px; overflow-y: auto; border: 1.5px solid #e8edf2; border-radius: 10px; margin-bottom: 14px; }
+        .hist-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f0f4f8; cursor: pointer; }
+        .hist-item:hover { background: #f0f7ff; }
+        .hist-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #1565c0; flex-shrink: 0; }
+        .hist-item-title { font-weight: 700; font-size: 0.86rem; color: #1565c0; }
+        .hist-item-sub { font-size: 0.72rem; color: #78909c; margin-top: 2px; }
+
+        .filtro-opcoes { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; max-height: 200px; overflow-y: auto; }
+        .filtro-opcao { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1.5px solid #e8edf2; border-radius: 8px; cursor: pointer; }
+        .filtro-opcao:hover { background: #f0f7ff; }
+        .filtro-opcao input[type=checkbox] { width: 17px; height: 17px; cursor: pointer; accent-color: #1565c0; flex-shrink: 0; }
+        .filtro-opcao label { cursor: pointer; font-size: 0.85rem; color: #37474f; flex: 1; }
+        .filtro-tipo-btn { display: flex; gap: 8px; margin-bottom: 12px; }
+        .filtro-tipo-btn button { flex: 1; padding: 8px; border: 2px solid #e8edf2; border-radius: 8px; background: white; cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #546e7a; font-family: inherit; }
+        .filtro-tipo-btn button.ativo { border-color: #1565c0; background: #e3f2fd; color: #1565c0; }
+
+        .user-card { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1.5px solid #e8edf2; border-radius: 10px; margin-bottom: 8px; }
+        .user-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#1565c0,#0d47a1); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem; flex-shrink: 0; }
+        .user-info { flex: 1; }
+        .user-nome { font-weight: 700; font-size: 0.88rem; color: #1565c0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .user-sub { font-size: 0.73rem; color: #78909c; margin-top: 2px; }
+        .role-badge { font-size: 0.68rem; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+        .badge-admin { background: #fce4ec; color: #c2185b; }
+        .badge-user  { background: #e0f2f1; color: #00695c; }
+        .contact-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+        .btn-contact { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.72rem; font-weight: 700; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; }
+        .btn-wa { background: #25d366; }
+        .btn-em { background: #1a73e8; }
+
+        #login-screen { display: none; position: fixed; inset: 0; background: linear-gradient(135deg,#1565c0,#0d47a1); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
+        #login-screen.active { display: flex; }
+        .login-box { background: white; border-radius: 20px; padding: 30px 24px; max-width: 360px; width: 100%; box-shadow: 0 24px 64px rgba(0,0,0,0.35); }
+        .login-box h2 { margin: 0 0 4px; color: #1565c0; font-size: 1.3rem; text-align: center; font-weight: 700; }
+        .login-sub { margin: 0 0 22px; color: #78909c; font-size: 0.82rem; text-align: center; }
+        .lf { margin-bottom: 12px; }
+        .lf label { display: block; font-size: 0.75rem; font-weight: 700; color: #546e7a; margin-bottom: 5px; text-transform: uppercase; }
+        .lf input { width: 100%; padding: 11px 12px; border: 1.5px solid #e0e7ef; border-radius: 10px; font-size: 0.92rem; font-family: inherit; outline: none; }
+        .lf input:focus { border-color: #1565c0; }
+        .btn-lp { width: 100%; padding: 12px; background: #1565c0; color: white; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-top: 6px; font-family: inherit; }
+        .btn-ls { width: 100%; padding: 10px; background: transparent; color: #1565c0; border: 1.5px solid #1565c0; border-radius: 10px; font-size: 0.86rem; font-weight: 600; cursor: pointer; margin-top: 8px; font-family: inherit; }
+        .login-err { color: #c62828; font-size: 0.8rem; margin-top: 6px; text-align: center; display: none; }
+        .login-rem { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 0.82rem; color: #546e7a; cursor: pointer; }
+        .login-rem input { width: 16px; height: 16px; cursor: pointer; accent-color: #1565c0; }
+        .mf { margin-bottom: 12px; }
+        .mf label { display: block; font-size: 0.75rem; font-weight: 700; color: #546e7a; margin-bottom: 5px; }
+        .mf input { width: 100%; padding: 10px 12px; border: 1.5px solid #e0e7ef; border-radius: 9px; font-size: 0.9rem; font-family: inherit; outline: none; }
+        .mf input:focus { border-color: #1565c0; }
+
+        /* ── SDI: Profissionais ── */
+        .prof-list-card { background: white; border-radius: 12px; border: 1.5px solid #e8edf2; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .prof-list-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .prof-list-nome { font-weight: 700; font-size: 0.92rem; color: #263238; }
+        .prof-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+        .ptag { font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; text-transform: uppercase; }
+        .ptag-rx { background: #e3f2fd; color: #1565c0; }
+        .ptag-tc { background: #e8f5e9; color: #2e7d32; }
+        .ptag-rm { background: #f3e5f5; color: #6a1b9a; }
+        .ptag-sob { background: #fff3e0; color: #e65100; }
+        .prof-list-sub { font-size: 0.72rem; color: #78909c; margin-top: 3px; }
+        .chk-row { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #37474f; }
+        .chk-row input { width: 16px; height: 16px; cursor: pointer; accent-color: #1565c0; }
+        .chk-group { display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 0; }
+
+        /* ── SDI: Escala Mensal ── */
+        .sdi-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        .sdi-subnav { display: flex; gap: 6px; background: #eef2f6; border-radius: 12px; padding: 5px; margin-bottom: 14px; border: 1px solid #e0e7ef; }
+        .sdi-subnav-btn { flex: 1; background: transparent; border: none; padding: 12px 8px; border-radius: 9px; font-size: 0.85rem; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #607d8b; cursor: pointer; font-family: inherit; transition: background .15s, color .15s; }
+        .sdi-subnav-btn:hover { background: #e3e9ef; }
+        .sdi-subnav-btn.active { background: #1565c0; color: white; box-shadow: 0 3px 10px rgba(21,101,192,0.4); }
+        .sdi-toolbar select { padding: 8px 10px; border: 1.5px solid #e0e7ef; border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
+        .btn-sdi { background: #1565c0; color: white; border: none; padding: 8px 13px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; font-weight: 600; font-family: inherit; }
+        .btn-sdi.g { background: #2e7d32; } .btn-sdi.o { background: #e65100; } .btn-sdi.p { background: #6a1b9a; } .btn-sdi.gy { background: #546e7a; }
+        .sdi-section-title { font-size: 0.78rem; font-weight: 700; color: #455a64; text-transform: uppercase; letter-spacing: .3px; margin: 16px 0 8px; }
+        .grid-mensal-wrap { overflow-x: auto; border-radius: 10px; border: 1.5px solid #e8edf2; }
+        .grid-mensal-wrap.breakout { width: 100vw; max-width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw; border-radius: 0; border-left: none; border-right: none; padding: 0 12px; box-sizing: border-box; }
+        table.grid-mensal { border-collapse: collapse; font-size: 0.68rem; white-space: nowrap; }
+        table.grid-mensal th, table.grid-mensal td { border: 1px solid #eceff1; padding: 4px 5px; text-align: center; }
+        table.grid-mensal th.prof-col, table.grid-mensal td.prof-col { position: sticky; left: 0; background: #fff; z-index: 2; text-align: left; font-weight: 700; color: #263238; min-width: 96px; cursor: grab; }
+        table.grid-mensal td.prof-col.drag-over { background: #bbdefb; outline: 2px dashed #1565c0; }
+        table.grid-mensal td.prof-col.dragging { opacity: 0.4; }
+        table.grid-mensal th { background: #1565c0; color: white; font-weight: 600; }
+        table.grid-mensal th.feriado { background: #c62828; }
+        table.grid-mensal th.finde { background: #ff8f00; }
+        table.grid-mensal td.dia-cel { cursor: pointer; min-width: 54px; color: #37474f; }
+        table.grid-mensal td.dia-cel:hover { background: #f0f7ff; }
+        table.grid-mensal td.bloqueado { background: #ffebee; color: #c62828; font-weight: 700; }
+        table.grid-mensal td.feriado-cel { background: #fff3e0; }
+        table.grid-mensal td.folga-cel { background: #eceff1; color: #78909c; }
+        .rest-alert-box { background: #ffebee; border: 1.5px solid #ef9a9a; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.8rem; color: #c62828; display: none; }
+        .rest-alert-box.show { display: block; }
+        .rest-alert-box ul { margin: 6px 0 0 18px; }
+        .sdi-legenda { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 4px 2px; font-size: 0.72rem; color: #546e7a; border-top: 1px solid #eceff1; margin-top: 8px; }
+        .sdi-legenda b { color: #263238; }
+        .sdi-cores-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .sdi-cor-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: #455a64; }
+        .sdi-cor-item input[type=color] { width: 36px; height: 30px; border: 1.5px solid #e0e7ef; border-radius: 6px; cursor: pointer; padding: 2px; }
+        #sdi-toast-wrap { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+        .sdi-toast { background: #263238; color: #fff; padding: 11px 20px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; white-space: nowrap; }
+        .sdi-toast.show { opacity: 1; transform: translateY(0); }
+        .sdi-toast.ok { background: #2e7d32; }
+        .sdi-toast.err { background: #c62828; }
+        .sob-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f0f4f8; font-size: 0.82rem; }
+        .sob-row label { width: 130px; flex-shrink: 0; color: #546e7a; font-weight: 600; }
+        .sob-row select { flex: 1; padding: 7px 9px; border: 1.5px solid #e0e7ef; border-radius: 7px; font-family: inherit; font-size: 0.82rem; }
+        @media print {
+            body * { visibility: hidden; }
+            body.print-mensal #print-area, body.print-mensal #print-area * { visibility: visible; }
+            body.print-mensal #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            body.print-mensal #tela-grade-wrap { display: none !important; }
+            body.print-mensal #print-grade-wrap { display: block !important; }
+            body.print-mensal table.grid-mensal-print { font-size: 7pt; white-space: nowrap; }
+            body.print-mensal table.grid-mensal-print th, body.print-mensal table.grid-mensal-print td { padding: 2px 4px; }
+            body.print-mensal table.grid-mensal-print td.prof-col, body.print-mensal table.grid-mensal-print th.prof-col { position: static; }
+            body.print-mensal table.grid-mensal-print td, body.print-mensal table.grid-mensal-print th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            @page { size: landscape; margin: 8mm; }
+            body.print-sobreaviso #print-area-sobreaviso, body.print-sobreaviso #print-area-sobreaviso * { visibility: visible; }
+            body.print-sobreaviso #print-area-sobreaviso { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+ </style>
+</head>
+<body>
+
+
+<div id="login-screen">
+ <div class="login-box">
+ <h2>GERENCIAMENTO SDI</h2>
+ <p class="login-sub" id="login-subtitle">Escalas &amp; Sobreaviso</p>
+ <div id="login-form-area">
+ <div class="lf"><label>E-mail</label><input type="email" id="login-email" placeholder="seu@email.com"></div>
+ <div class="lf"><label>Senha</label><input type="password" id="login-senha" placeholder="••••••" onkeydown="if(event.key==='Enter')fazerLogin()"></div>
+ <label class="login-rem"><input type="checkbox" id="login-lembrar">Lembrar e-mail e senha</label>
+ <p class="login-err" id="login-erro">E-mail ou senha incorretos.</p>
+ <button class="btn-lp" onclick="fazerLogin()">Entrar</button>
+ <button class="btn-ls" onclick="mostrarFormCadastro()">Criar conta</button>
+ </div>
+ <div id="cadastro-form-area" style="display:none">
+ <div class="lf"><label>Nome completo</label><input type="text" id="cad-nome" placeholder="Seu nome"></div>
+ <div class="lf"><label>E-mail</label><input type="email" id="cad-email" placeholder="seu@email.com"></div>
+ <div class="lf"><label>WhatsApp</label><input type="tel" id="cad-whatsapp" placeholder="(47) 99999-9999"></div>
+ <div class="lf"><label>Senha</label><input type="password" id="cad-senha" placeholder="Mínimo 4 caracteres"></div>
+ <p class="login-err" id="cad-erro">Preencha todos os campos.</p>
+ <button class="btn-lp" onclick="fazerCadastro()">Cadastrar</button>
+ <button class="btn-ls" onclick="mostrarFormLogin()">Já tenho conta</button>
+ </div>
+ </div>
+</div>
+
+<div class="app-header">
+ <div class="header-inner">
+ <div class="header-top-row">
+ <div class="header-brand">
+ <div class="header-logo">SDI</div>
+ <div>
+ <div class="header-title">GERENCIAMENTO SDI</div>
+ <div class="header-subtitle">Escalas, Sobreaviso e Controle de Plantão</div>
+ </div>
+ </div>
+ <div class="header-badges">
+ <div id="user-badge" class="badge-user-pill"></div>
+ <span id="backup-status" class="offline">☁ Drive</span>
+ </div>
+ </div>
+ </div>
+</div>
+
+<div class="content-wrap">
+ <div class="btn-grid">
+ <button class="btn-action c-blue" onclick="conectarGDrive()"><span class="bi">☁</span><span class="bl">Conectar Drive</span></button>
+ <button class="btn-action c-green" onclick="restaurarDoDrive()"><span class="bi">↓</span><span class="bl">Rest. Drive</span></button>
+ <button class="btn-action c-orange" onclick="fazerBackupLocal()"><span class="bi">↧</span><span class="bl">Backup</span></button>
+ <button class="btn-action c-teal" onclick="document.getElementById('fileInput').click()"><span class="bi">↥</span><span class="bl">Importar</span></button>
+ <button class="btn-action c-purple" onclick="abrirUsuarios()"><span class="bi">◉</span><span class="bl">Usuários</span></button>
+ <input type="file" id="fileInput" style="display:none" onchange="restaurarBackup(this)">
+ </div>
+
+ <div class="tabs-bar">
+ <button class="tab-btn active" onclick="tab(event,'sdi-profissionais')">Cadastro</button>
+ <button class="tab-btn" onclick="tab(event,'sdi-escala-mensal')">Escalas</button>
+ <button class="tab-btn" onclick="tab(event,'sdi-historico')">Histórico</button>
+ </div>
+
+ <!-- ═══ SDI: PROFISSIONAIS ═══ -->
+ <div id="sdi-profissionais" class="tab-content active">
+ <div class="form-card">
+ <input type="hidden" id="pf-id">
+ <div class="grid-inputs">
+ <div class="form-group"><label>Nome</label><input type="text" id="pf-nome" placeholder="Nome do profissional"></div>
+ <div class="form-group"><label>Telefone</label><input type="tel" id="pf-telefone" placeholder="(47) 90000-0000"></div>
+ </div>
+ <div class="chk-group">
+ <label class="chk-row"><input type="checkbox" id="pf-rx" onchange="onChangePfAtividade()">RX</label>
+ <label class="chk-row"><input type="checkbox" id="pf-tc" onchange="onChangePfAtividade()">TC</label>
+ <label class="chk-row"><input type="checkbox" id="pf-rm" onchange="onChangePfAtividade()">RM</label>
+ <label class="chk-row"><input type="checkbox" id="pf-sob" onchange="onChangePfAtividade()" disabled>Faz Sobreaviso</label>
+ </div>
+ <div class="grid-inputs" id="pf-subid-wrap" style="display:none">
+ <div class="form-group"><label>Sub-identificação (sobreaviso)</label><input type="text" id="pf-subid" placeholder="Ex: SDI-TC1"></div>
+ </div>
+ <button id="btn-save-pf" class="btn-save" onclick="salvarProfissional()">Salvar Profissional</button>
+ <button id="btn-cancel-pf" class="btn-cancel-form" onclick="limparCamposProfissional()">Cancelar</button>
+ </div>
+
+ <div class="sdi-section-title">Enviar Escalas</div>
+ <div class="form-card">
+ <div class="grid-inputs">
+ <div class="form-group"><label>Escala</label>
+ <select id="env-escala">
+ <option value="mensal">Escala Mensal</option>
+ <option value="sobreaviso">Escala de Sobreaviso</option>
+ <option value="ambas">Ambas</option>
+ </select>
+ </div>
+ <div class="form-group"><label>Destinatário</label>
+ <select id="env-destino">
+ <option value="">Todos os profissionais</option>
+ </select>
+ </div>
+ </div>
+ <button class="btn-save" onclick="enviarEscalasSdi()">Gerar PDF</button>
+ </div>
+
+ <div id="lista-profissionais"></div>
+ </div>
+
+ <!-- ═══ SDI: ESCALA MENSAL ═══ -->
+ <div id="sdi-escala-mensal" class="tab-content">
+ <div class="sdi-toolbar">
+ <select id="sdi-sel-ano"></select>
+ <select id="sdi-sel-mes-num"></select>
+ <button class="btn-sdi" onclick="sdiTrocarMes()">Carregar Mês</button>
+ </div>
+
+ <div class="form-card" id="sdi-obs-card">
+ <label style="font-size:0.78rem;font-weight:700;color:#455a64;text-transform:uppercase;letter-spacing:.3px">Observações / Orientações do Mês</label>
+ <textarea id="sdi-obs-texto" rows="2" style="width:100%;padding:9px;border:1.5px solid #e0e7ef;border-radius:8px;font-family:inherit;font-size:0.85rem;margin-top:6px" placeholder="Ex: Trocas devem ser comunicadas com 48h de antecedência."></textarea>
+ <div class="chk-group" style="padding-top:8px">
+ <label class="chk-row"><input type="checkbox" id="sdi-obs-mensal"> Exibir na Escala Mensal (topo, ao lado do mês)</label>
+ <label class="chk-row"><input type="checkbox" id="sdi-obs-sobreaviso"> Exibir na Escala de Sobreaviso (rodapé)</label>
+ </div>
+ <button class="btn-save" onclick="salvarObservacaoSdi()">Salvar Observação</button>
+ </div>
+
+ <div class="sdi-subnav" id="sdi-subnav">
+ <button class="sdi-subnav-btn active" onclick="sdiSubTab('sobreaviso')">Sobreaviso</button>
+ <button class="sdi-subnav-btn" onclick="sdiSubTab('lancamentos')">Lançamentos</button>
+ <button class="sdi-subnav-btn" onclick="sdiSubTab('grade')">Grade Mensal</button>
+ </div>
+
+ <div class="rest-alert-box" id="rest-alert-box"></div>
+
+ <!-- MÓDULO: SOBREAVISO -->
+ <div class="sdi-mod" id="sdi-mod-sobreaviso">
+ <div class="sdi-section-title">Escala de Sobreaviso do Mês (fins de semana)</div>
+ <div class="form-card">
+ <div id="sdi-sobreaviso-lista"></div>
+ <button class="btn-save" onclick="autoPreencherSobreaviso()">Preencher Automaticamente</button>
+ </div>
+ <div class="sdi-toolbar">
+ <button class="btn-sdi p" onclick="gerarRelatorioSobreavisoSDI()">Relatório de Sobreaviso</button>
+ <button class="btn-sdi gy" onclick="imprimirEscalaSobreavisoSDI()">Imprimir Sobreaviso</button>
+ </div>
+ <div id="print-area-sobreaviso" class="grid-mensal-wrap">
+ <table class="grid-mensal" id="tbl-escala-sobreaviso"><thead></thead><tbody></tbody></table>
+ <div id="sdi-obs-rodape-sobreaviso" style="padding:10px 12px;font-size:0.8rem;color:#455a64;border-top:1px solid #eceff1"></div>
+ </div>
+ </div>
+
+ <!-- MÓDULO: LANÇAMENTOS -->
+ <div class="sdi-mod" id="sdi-mod-lancamentos" style="display:none">
+ <div class="sdi-section-title">Lançamento Individual</div>
+ <div class="form-card">
+ <div class="grid-inputs">
+ <div class="form-group"><label>Profissional</label><select id="li-prof"></select></div>
+ <div class="form-group"><label>Dia</label><select id="li-dia"></select></div>
+ <div class="form-group"><label>Tipo</label>
+ <select id="li-tipo" onchange="onChangeLiTipo()">
+ <option value="horario">Horário</option>
+ <option value="dsr">DSR</option>
+ <option value="ferias">Férias (FE)</option>
+ <option value="bh_menos">Folga banco de horas (BH-)</option>
+ <option value="bh_mais">Ajuste de banco de horas (BH+)</option>
+ <option value="folga_feriado">Folga feriado (FF)</option>
+ <option value="atestado">Atestado (Atest.)</option>
+ </select>
+ </div>
+ <div class="form-group" id="li-inicio-wrap"><label>Início</label><input type="time" id="li-inicio"></div>
+ <div class="form-group" id="li-fim-wrap"><label>Fim</label><input type="time" id="li-fim"></div>
+ </div>
+ <button class="btn-save" onclick="lancarIndividual()">Lançar</button>
+ </div>
+
+ <div class="sdi-section-title">Lançamento Automático (demais profissionais RX)</div>
+ <div class="form-card">
+ <p style="font-size:0.82rem;color:#546e7a;margin-bottom:10px">Repete o padrão de dias úteis do mês anterior e alterna os horários de fim de semana automaticamente, para os profissionais marcados como RX. Dias já bloqueados por sobreaviso não são sobrescritos.</p>
+ <button class="btn-save" onclick="lancarAutomaticoDemais()">Lançar Automaticamente os Demais</button>
+ </div>
+ </div>
+
+ <!-- MÓDULO: GRADE MENSAL -->
+ <div class="sdi-mod" id="sdi-mod-grade" style="display:none">
+ <div class="sdi-toolbar">
+ <button class="btn-sdi g" onclick="gerarEscalaAutomatica()">Gerar Automática (Feriados)</button>
+ <button class="btn-sdi o" onclick="verificarDescansos()">Verificar Descanso 12h</button>
+ <button class="btn-sdi p" onclick="gerarRelatorioSDI()">Visualizar Escala</button>
+ <button class="btn-sdi gy" onclick="imprimirEscalaSDI()">Imprimir Grade</button>
+ <button class="btn-sdi gy" onclick="gerarPdfTodosIndividuais()">PDF Individual — Todos</button>
+ <button class="btn-sdi gy" onclick="toggleCoresSdi()">Personalizar Cores</button>
+ </div>
+
+ <div class="form-card" id="sdi-cores-card" style="display:none">
+ <div class="sdi-cores-grid" id="sdi-cores-grid"></div>
+ <div style="display:flex;gap:8px;margin-top:10px">
+ <button class="btn-save" onclick="salvarCoresSdi()">Salvar Cores</button>
+ <button class="btn-cancel-form" style="display:inline-block" onclick="restaurarCoresPadraoSdi()">Restaurar Padrão</button>
+ </div>
+ </div>
+ <p style="font-size:0.78rem;color:#90a4ae;margin:-4px 0 8px">Arraste o nome de um profissional (coluna à esquerda) e solte sobre outro para trocar as escalas do mês entre os dois.</p>
+ <div class="sdi-section-title">Grade da Escala Mensal <span id="sdi-mes-label-title"></span></div>
+ <div id="print-area">
+ <div id="sdi-obs-topo-mensal" style="text-align:center;font-weight:600;color:#1565c0;font-size:0.85rem;padding-bottom:8px"></div>
+ <div class="grid-mensal-wrap breakout" id="tela-grade-wrap">
+ <table class="grid-mensal" id="tbl-escala-mensal">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div class="grid-mensal-wrap" id="print-grade-wrap" style="display:none">
+ <table class="grid-mensal grid-mensal-print" id="tbl-escala-mensal-print">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div id="sdi-legenda" class="sdi-legenda"></div>
+ </div>
+ </div>
+ </div>
+</div>
+
+<!-- SDI: HISTÓRICO -->
+<div id="sdi-historico" class="tab-content">
+ <div class="sdi-toolbar">
+ <select id="hist-sel-mes"></select>
+ <select id="hist-sel-prof"><option value="">Todos os profissionais</option></select>
+ <button class="btn-sdi" onclick="renderHistorico()">Consultar</button>
+ </div>
+
+ <div class="sdi-section-title">Escala do Mês Selecionado</div>
+ <div class="grid-mensal-wrap breakout">
+ <table class="grid-mensal" id="tbl-historico-grade"><thead></thead><tbody></tbody></table>
+ </div>
+
+ <div class="sdi-section-title">Trocas Registradas no Mês</div>
+ <div id="hist-trocas-lista" class="form-card"></div>
+</div>
+
+
+
+<!-- Modais -->
+<div class="modal-overlay" id="modal-corrida-aberta">
+ <div class="modal-box"><h3>Corrida sem horário de saída</h3>
+ <p>Esta corrida está <b>em aberto</b>. Deseja salvar assim mesmo?</p>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-corrida-aberta')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button onclick="confirmarCorridaAberta()" style="background:#2e7d32;color:white">Sim, salvar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-del">
+ <div class="modal-box danger"><h3>Confirmar exclusão</h3>
+ <p id="modal-del-msg">Tem certeza?</p>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-del')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button id="modal-del-confirm" style="background:#c62828;color:white">Excluir</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-hist">
+ <div class="modal-box" style="max-width:500px"><h3 style="color:#1565c0">Histórico de Meses</h3>
+ <p>Selecione um ou mais meses:</p>
+ <div class="hist-lista" id="hist-lista"></div>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-hist')" style="background:#eceff1;color:#546e7a">Fechar</button>
+ <button onclick="relatorioHistorico('print')" style="background:#4527a0;color:white">Relatório</button>
+ <button onclick="relatorioHistorico('pdf')" style="background:#c62828;color:white">PDF</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-filtro-rel">
+ <div class="modal-box" style="max-width:460px"><h3 style="color:#1565c0" id="modal-filtro-titulo">Gerar Relatório</h3>
+ <div class="filtro-tipo-btn">
+ <button id="btn-filtro-mes" class="ativo" onclick="alternarFiltroTipo('mes')">Mês completo</button>
+ <button id="btn-filtro-esc" onclick="alternarFiltroTipo('escala')">Por escala</button>
+ </div>
+ <div id="filtro-mes-area"><p>Relatório completo do mês ativo.</p></div>
+ <div id="filtro-esc-area" style="display:none">
+ <p>Selecione uma ou mais escalas:</p>
+ <div class="filtro-opcoes" id="filtro-escalas-lista"></div>
+ </div>
+ <div style="margin-bottom:14px;padding:10px;background:#f8f9fa;border-radius:10px;border:1.5px solid #e8edf2">
+ <label style="font-size:0.75rem;font-weight:700;color:#546e7a;display:block;margin-bottom:6px">Data de entrega (opcional)</label>
+ <input type="date" id="filtro-data-entrega" style="width:100%;padding:9px;border:1.5px solid #e0e7ef;border-radius:8px;font-size:0.88rem;font-family:inherit">
+ </div>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-filtro-rel')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button id="btn-filtro-gerar" onclick="gerarComFiltro()" style="background:#c62828;color:white">Gerar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-rest-drive">
+ <div class="modal-box danger"><h3>⬇ Restaurar do Google Drive</h3>
+ <p>Irá <b>sobrescrever os dados locais</b>. Tem certeza?</p>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-rest-drive')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button onclick="confirmarRestaurarDrive()" style="background:#c62828;color:white">Sim, restaurar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-novo-mes">
+ <div class="modal-box"><h3 style="color:#1565c0">Novo mês</h3>
+ <p>Nome do novo mês:</p>
+ <input type="text" id="input-novo-mes" placeholder="Ex: Junho 2026" style="width:100%;padding:10px;border:1.5px solid #e0e7ef;border-radius:9px;font-size:0.9rem;font-family:inherit;margin-bottom:14px;outline:none">
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-novo-mes')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button onclick="criarNovoMes()" style="background:#1565c0;color:white">Criar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-usuarios">
+ <div class="modal-box" style="max-width:500px"><h3 style="color:#6a1b9a">Gerenciar Usuários</h3>
+ <p id="modal-usuarios-info" style="margin-bottom:10px"></p>
+ <div id="modal-usuarios-lista" style="max-height:380px;overflow-y:auto;margin-bottom:14px"></div>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-usuarios')" style="background:#eceff1;color:#546e7a">Fechar</button>
+ <button onclick="sairDaSessao()" style="background:#c62828;color:white">Sair</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-feriado-manual">
+ <div class="modal-box"><h3 style="color:#c62828">Adicionar feriado manual</h3>
+ <div class="form-group" style="margin-bottom:10px"><label>Data</label><input type="date" id="fm-data" style="width:100%;padding:9px;border:1.5px solid #e0e7ef;border-radius:8px;font-family:inherit"></div>
+ <div class="form-group"><label>Nome do feriado</label><input type="text" id="fm-nome" style="width:100%;padding:9px;border:1.5px solid #e0e7ef;border-radius:8px;font-family:inherit" placeholder="Ex: Aniversário do município"></div>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-feriado-manual')" style="background:#eceff1;color:#546e7a">Concluir</button>
+ <button onclick="confirmarFeriadoManual()" style="background:#c62828;color:white">+ Adicionar e continuar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-editar-dia">
+ <div class="modal-box"><h3 style="color:#1565c0" id="ed-titulo">Editar dia</h3>
+ <div class="form-group" style="margin-bottom:10px"><label>Tipo</label>
+ <select id="ed-tipo" onchange="onChangeEdTipo()" style="width:100%;padding:9px;border:1.5px solid #e0e7ef;border-radius:8px;font-family:inherit">
+ <option value="horario">Horário</option>
+ <option value="dsr">DSR</option>
+ <option value="ferias">Férias (FE)</option>
+ <option value="bh_menos">Folga banco de horas (BH-)</option>
+ <option value="bh_mais">Ajuste de banco de horas (BH+)</option>
+ <option value="folga_feriado">Folga feriado (FF)</option>
+ <option value="atestado">Atestado (Atest.)</option>
+ </select>
+ </div>
+ <div class="grid-inputs" id="ed-horario-wrap">
+ <div class="form-group"><label>Início</label><input type="time" id="ed-inicio"></div>
+ <div class="form-group"><label>Fim</label><input type="time" id="ed-fim"></div>
+ </div>
+ <p id="ed-bloqueado-aviso" style="display:none;color:#c62828;font-size:0.8rem;margin-top:8px">Este dia está bloqueado por sobreaviso e não pode ter horário de escala mensal.</p>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-editar-dia')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button onclick="excluirLancamentoDia()" style="background:#c62828;color:white">Limpar</button>
+ <button onclick="salvarEdicaoDia()" style="background:#2e7d32;color:white">Salvar</button>
+ </div></div>
+</div>
+
+<div class="modal-overlay" id="modal-config-drive">
+ <div class="modal-box" style="max-width:400px"><h3 style="color:#1565c0">☁ Configurar Google Drive</h3>
+ <p>Salve seu e-mail do Google para conectar mais rápido:</p>
+ <div class="mf"><label>E-mail Google</label><input type="email" id="drive-email-salvo" placeholder="seu@gmail.com"></div>
+ <div class="modal-actions">
+ <button onclick="fecharModal('modal-config-drive')" style="background:#eceff1;color:#546e7a">Cancelar</button>
+ <button onclick="salvarEmailDrive()" style="background:#1565c0;color:white">Salvar e Conectar</button>
+ </div></div>
+</div>
+
+<script>
+
+'use strict';
+let allData = { user:'', meses:{}, usuarios:[] };
+let mesAtual = null;
+let usuarioLogado = null;
+
+function dbMes() { return allData.meses[mesAtual] || { escalas:[], exames:[], corridas:[] }; }
+const hoje = () => new Date().toISOString().slice(0,10);
+function salvarLS() { localStorage.setItem('radiologiaDB_v2', JSON.stringify(allData)); }
+
+/* ── LOGIN ── */
+function iniciarApp() {
+    try { const s = localStorage.getItem('radiologiaDB_v2'); if (s) allData = JSON.parse(s); } catch(e) {}
+    if (!allData.usuarios) allData.usuarios = [];
+    _tentarReconectarDrive();
+    const sessao = sessionStorage.getItem('sbSessao');
+    if (sessao) {
+        try {
+            const u = JSON.parse(sessao);
+            const ainda = allData.usuarios.find(x => x.id === u.id);
+            if (ainda) { usuarioLogado = ainda; iniciarComUsuario(); return; }
+        } catch(e) {}
+    }
+    if (allData.usuarios.length === 0) { iniciarComUsuario(); }
+    else {
+        document.getElementById('login-screen').classList.add('active');
+        document.getElementById('login-subtitle').textContent = 'Entre com sua conta para continuar';
+        try {
+            const creds = localStorage.getItem('sbCreds');
+            if (creds) {
+                const { email, senha } = JSON.parse(creds);
+                document.getElementById('login-email').value = email || '';
+                document.getElementById('login-senha').value = senha || '';
+                document.getElementById('login-lembrar').checked = true;
+            }
+        } catch(e) {}
+    }
+}
+
+function mostrarFormCadastro() {
+    document.getElementById('login-form-area').style.display = 'none';
+    document.getElementById('cadastro-form-area').style.display = 'block';
+}
+function mostrarFormLogin() {
+    document.getElementById('cadastro-form-area').style.display = 'none';
+    document.getElementById('login-form-area').style.display = 'block';
+}
+function fazerLogin() {
+    const email  = document.getElementById('login-email').value.trim().toLowerCase();
+    const senha  = document.getElementById('login-senha').value;
+    const lembrar= document.getElementById('login-lembrar').checked;
+    const u = allData.usuarios.find(x => x.email.toLowerCase() === email && x.senha === senha);
+    if (!u) { document.getElementById('login-erro').style.display = 'block'; return; }
+    document.getElementById('login-erro').style.display = 'none';
+    if (lembrar) localStorage.setItem('sbCreds', JSON.stringify({ email, senha }));
+    else localStorage.removeItem('sbCreds');
+    usuarioLogado = u;
+    sessionStorage.setItem('sbSessao', JSON.stringify(u));
+    document.getElementById('login-screen').classList.remove('active');
+    iniciarComUsuario();
+}
+function fazerCadastro() {
+    const nome     = document.getElementById('cad-nome').value.trim();
+    const email    = document.getElementById('cad-email').value.trim().toLowerCase();
+    const whatsapp = document.getElementById('cad-whatsapp').value.trim();
+    const senha    = document.getElementById('cad-senha').value;
+    const erroEl   = document.getElementById('cad-erro');
+    if (!nome || !email || !senha || senha.length < 4) {
+        erroEl.textContent = 'Preencha todos os campos (senha min. 4 caracteres).';
+        erroEl.style.display = 'block'; return;
+    }
+    if (allData.usuarios.find(x => x.email.toLowerCase() === email)) {
+        erroEl.textContent = 'E-mail ja cadastrado.'; erroEl.style.display = 'block'; return;
+    }
+    erroEl.style.display = 'none';
+    const u = { id: Date.now(), nome, email, whatsapp, senha,
+        role: allData.usuarios.length === 0 ? 'admin' : 'user',
+        criadoEm: new Date().toLocaleDateString('pt-BR') };
+    allData.usuarios.push(u);
+    salvarLS();
+    usuarioLogado = u;
+    sessionStorage.setItem('sbSessao', JSON.stringify(u));
+    document.getElementById('login-screen').classList.remove('active');
+    iniciarComUsuario();
+}
+function iniciarComUsuario() {
+    if (usuarioLogado) {
+        const b = document.getElementById('user-badge');
+        b.textContent = (usuarioLogado.role === 'admin' ? 'Admin: ' : '') + usuarioLogado.nome.split(' ')[0];
+        b.style.display = 'inline-flex';
+        if (!allData.user && usuarioLogado.nome) allData.user = usuarioLogado.nome;
+    }
+    if (!allData.meses) allData.meses = {};
+    salvarLS();
+}
+function sairDaSessao() {
+    sessionStorage.removeItem('sbSessao');
+    usuarioLogado = null;
+    fecharModal('modal-usuarios');
+    location.reload();
+}
+function abrirUsuarios() {
+    const infoEl  = document.getElementById('modal-usuarios-info');
+    const listaEl = document.getElementById('modal-usuarios-lista');
+    const isAdmin = usuarioLogado && usuarioLogado.role === 'admin';
+    if (!isAdmin) {
+        const u = usuarioLogado;
+        infoEl.innerHTML = '<b>Minha conta</b>';
+        listaEl.innerHTML = u
+            ? '<div class="user-card"><div class="user-avatar">' + u.nome.charAt(0).toUpperCase() + '</div>'
+              + '<div class="user-info"><div class="user-nome">' + u.nome
+              + ' <span class="role-badge badge-user">Usuario</span></div>'
+              + '<div class="user-sub">\u{1F4E7} ' + u.email + '</div>'
+              + (u.whatsapp ? '<div class="user-sub">\u{1F4F1} ' + u.whatsapp + '</div>' : '')
+              + '</div></div>' : '';
+    } else {
+        infoEl.innerHTML = '<span style="font-size:0.83rem;color:#546e7a"><b>' + allData.usuarios.length + '</b> usuario(s).</span>';
+        listaEl.innerHTML = allData.usuarios.map(function(u) {
+            var waNum  = u.whatsapp ? u.whatsapp.replace(/\D/g,'') : '';
+            var waBt   = waNum ? '<a class="btn-contact btn-wa" href="https://wa.me/55' + waNum + '" target="_blank">\u{1F4AC} WhatsApp</a>' : '';
+            var emBt   = u.email ? '<a class="btn-contact btn-em" href="mailto:' + u.email + '">\u{2709}\uFE0F E-mail</a>' : '';
+            var delBt  = u.id !== (usuarioLogado && usuarioLogado.id)
+                ? '<button onclick="excluirUsuario(' + u.id + ')" style="background:#c62828;color:white;border:none;padding:5px 9px;border-radius:6px;cursor:pointer;font-size:0.72rem;font-weight:600;flex-shrink:0">\u{1F5D1}</button>' : '';
+            return '<div class="user-card">'
+                + '<div class="user-avatar">' + u.nome.charAt(0).toUpperCase() + '</div>'
+                + '<div class="user-info"><div class="user-nome">' + u.nome
+                + ' <span class="role-badge ' + (u.role==='admin'?'badge-admin':'badge-user') + '">' + (u.role==='admin'?'Admin':'Usuario') + '</span></div>'
+                + '<div class="user-sub">\u{1F4E7} ' + u.email + '</div>'
+                + (u.whatsapp ? '<div class="user-sub">\u{1F4F1} ' + u.whatsapp + '</div>' : '')
+                + '<div class="user-sub">\u{1F5D3} ' + (u.criadoEm||'--') + '</div>'
+                + '<div class="contact-btns">' + waBt + emBt + '</div></div>' + delBt + '</div>';
+        }).join('') || '<p style="color:#90a4ae;font-size:0.85rem">Nenhum usuario.</p>';
+    }
+    abrirModal('modal-usuarios');
+}
+function excluirUsuario(id) {
+    if (!confirm('Excluir este usuario?')) return;
+    allData.usuarios = allData.usuarios.filter(function(u){ return u.id !== id; });
+    salvarLS(); abrirUsuarios();
+}
+
+/* ── DADOS ── */
+function salvarDados() {
+    allData.user = document.getElementById('userName').value;
+    if (!mesAtual) return;
+    var m = allData.meses[mesAtual];
+    m.escalas = [];
+    document.querySelectorAll('.escala-item').forEach(function(item) {
+        m.escalas.push({
+            data:  item.querySelector('.sc-data').value,
+            in:    item.querySelector('.sc-in').value,
+            dataF: item.querySelector('.sc-data-f').value,
+            out:   item.querySelector('.sc-out').value
+        });
+    });
+    salvarLS(); render(); driveDebounce();
+}
+function carregar() {
+    try { var s = localStorage.getItem('radiologiaDB_v2'); if (s) allData = JSON.parse(s); } catch(e) {}
+    if (!allData.usuarios) allData.usuarios = [];
+    if (!allData.meses)    allData.meses    = {};
+    if (!Object.keys(allData.meses).length) {
+        var old = localStorage.getItem('radiologiaDB');
+        if (old) {
+            try {
+                var o = JSON.parse(old);
+                var id = 'mes_' + Date.now();
+                allData.meses[id] = { label:'Importado', escalas:o.escalas||[], exames:o.exames||[], corridas:o.corridas||[] };
+                salvarLS();
+            } catch(e) {}
+        }
+    }
+    document.getElementById('userName').value = allData.user || '';
+    popularSelectMes();
+    var ids = Object.keys(allData.meses);
+    if (ids.length > 0) {
+        mesAtual = ids[ids.length - 1];
+        document.getElementById('sel-mes').value = mesAtual;
+        carregarMes();
+    } else {
+        var nid = 'mes_' + Date.now();
+        allData.meses[nid] = { label: labelMesAtual(), escalas:[], exames:[], corridas:[] };
+        mesAtual = nid; popularSelectMes();
+        document.getElementById('sel-mes').value = mesAtual;
+    }
+    preencherDataHoje();
+}
+function popularSelectMes() {
+    document.getElementById('sel-mes').innerHTML = Object.entries(allData.meses)
+        .map(function(e){ return '<option value="' + e[0] + '">' + e[1].label + '</option>'; }).join('');
+}
+function labelMesAtual() {
+    return new Date().toLocaleString('pt-BR',{month:'long',year:'numeric'}).replace(/^\w/,function(c){return c.toUpperCase();});
+}
+function carregarMes() {
+    document.getElementById('lista-escalas').innerHTML = '';
+    var m = allData.meses[mesAtual];
+    if (m) m.escalas.forEach(function(e){ addEscala(e.data, e.in, e.dataF, e.out); });
+    atualizarContadorEscalas(); render();
+}
+function trocarMes()  { mesAtual = document.getElementById('sel-mes').value; carregarMes(); }
+function novoMes()    { document.getElementById('input-novo-mes').value = labelMesAtual(); abrirModal('modal-novo-mes'); }
+function criarNovoMes() {
+    var label = document.getElementById('input-novo-mes').value.trim();
+    if (!label) return;
+    var id = 'mes_' + Date.now();
+    allData.meses[id] = { label:label, escalas:[], exames:[], corridas:[] };
+    mesAtual = id; salvarLS(); popularSelectMes();
+    document.getElementById('sel-mes').value = mesAtual;
+    document.getElementById('lista-escalas').innerHTML = '';
+    render(); fecharModal('modal-novo-mes'); preencherDataHoje();
+}
+function excluirMesAtual() {
+    var ids = Object.keys(allData.meses);
+    if (ids.length <= 1) { alert('Nao e possivel excluir o unico mes.'); return; }
+    confirmarDel('Excluir o mes "' + allData.meses[mesAtual].label + '" e todos os seus dados?', function() {
+        delete allData.meses[mesAtual]; salvarLS(); popularSelectMes();
+        mesAtual = Object.keys(allData.meses).slice(-1)[0];
+        document.getElementById('sel-mes').value = mesAtual;
+        document.getElementById('lista-escalas').innerHTML = ''; carregarMes();
+    });
+}
+function preencherDataHoje() {
+    var h = hoje();
+    document.getElementById('ex-data').value = h;
+    document.getElementById('co-data').value = h;
+}
+
+/* ── TABS ── */
+function tab(e, n) {
+    document.querySelectorAll('.tab-content,.tab-btn').forEach(function(el){ el.classList.remove('active'); });
+    document.getElementById(n).classList.add('active');
+    e.currentTarget.classList.add('active');
+    if (n === 'resumo') renderResumo();
+}
+
+/* ── ESCALAS ── */
+var _escAberto = false;
+function toggleEscalas() {
+    _escAberto = !_escAberto;
+    document.getElementById('escalas-body').style.display = _escAberto ? 'block' : 'none';
+    document.getElementById('btn-toggle-esc').textContent  = _escAberto ? 'Ocultar' : 'Mostrar';
+}
+function atualizarContadorEscalas() {
+    document.getElementById('escala-count').textContent = document.querySelectorAll('.escala-item').length;
+}
+function addEscala(data, inT, dataF, outT) {
+    data = data||''; inT = inT||''; dataF = dataF||''; outT = outT||'';
+    var div = document.createElement('div');
+    div.className = 'escala-item';
+    div.innerHTML =
+        '<div class="form-group"><label>Inicio</label><input type="date" class="sc-data" value="' + data + '" onchange="salvarDados()"></div>'
+      + '<div class="form-group"><label>Hora</label><input type="time" class="sc-in" value="' + inT + '" onchange="salvarDados()"></div>'
+      + '<div class="form-group"><label>Fim</label><input type="date" class="sc-data-f" value="' + dataF + '" onchange="salvarDados()"></div>'
+      + '<div class="form-group"><label>Hora</label><input type="time" class="sc-out" value="' + outT + '" onchange="salvarDados()"></div>'
+      + '<button onclick="this.parentElement.remove();salvarDados();atualizarContadorEscalas()" style="background:#c62828;color:white;border:none;padding:8px;border-radius:7px;cursor:pointer;align-self:flex-end">X</button>';
+    document.getElementById('lista-escalas').appendChild(div);
+    atualizarContadorEscalas();
+}
+
+/* ── EXAMES ── */
+function addExame() {
+    var id    = document.getElementById('ex-id').value;
+    var dados = {
+        data:  document.getElementById('ex-data').value,
+        hora:  document.getElementById('ex-hora').value,
+        setor: document.getElementById('ex-setor').value,
+        nome:  document.getElementById('ex-nome').value,
+        pac:   document.getElementById('ex-pac').value
+    };
+    var m = allData.meses[mesAtual];
+    if (id) {
+        var idx = m.exames.findIndex(function(e){ return e.id == id; });
+        m.exames[idx] = Object.assign({}, m.exames[idx], dados);
+    } else {
+        m.exames.push(Object.assign({ id: Date.now() }, dados));
+    }
+    var dd = dados.data, ss = dados.setor;
+    limparCamposExame(false);
+    document.getElementById('ex-data').value  = dd;
+    document.getElementById('ex-setor').value = ss;
+    salvarDados();
+}
+function editExame(id) {
+    var ex = dbMes().exames.find(function(i){ return i.id == id; });
+    document.getElementById('ex-id').value    = ex.id;
+    document.getElementById('ex-data').value  = ex.data;
+    document.getElementById('ex-hora').value  = ex.hora;
+    document.getElementById('ex-setor').value = ex.setor;
+    document.getElementById('ex-nome').value  = ex.nome;
+    document.getElementById('ex-pac').value   = ex.pac;
+    document.getElementById('btn-save-ex').innerText = 'Atualizar Exame';
+    document.getElementById('btn-cancel-ex').style.display = 'inline-block';
+    abrirFormExame();
+}
+function limparCamposExame(r) {
+    document.getElementById('ex-id').value   = '';
+    document.getElementById('ex-hora').value = '';
+    document.getElementById('ex-nome').value = '';
+    document.getElementById('ex-pac').value  = '';
+    if (r !== false) { document.getElementById('ex-data').value = hoje(); document.getElementById('ex-setor').value = ''; }
+    document.getElementById('btn-save-ex').innerText = 'Salvar Exame';
+    document.getElementById('btn-cancel-ex').style.display = 'none';
+}
+
+/* ── CORRIDAS ── */
+var _pendDados = null, _pendId = null;
+function addCorrida() {
+    var id = document.getElementById('co-id').value;
+    var dados = {
+        data:  document.getElementById('co-data').value,
+        in:    document.getElementById('co-in').value,
+        out:   document.getElementById('co-out').value,
+        km:    document.getElementById('co-km').value,
+        setor: document.getElementById('co-setor').value,
+        tempo: calcDiffSimple(document.getElementById('co-in').value, document.getElementById('co-out').value)
+    };
+    if (!dados.out) { _pendDados = dados; _pendId = id; abrirModal('modal-corrida-aberta'); return; }
+    _persistirCorrida(id, dados);
+}
+function confirmarCorridaAberta() { fecharModal('modal-corrida-aberta'); _persistirCorrida(_pendId, _pendDados); }
+function _persistirCorrida(id, dados) {
+    var m = allData.meses[mesAtual];
+    if (id) {
+        var idx = m.corridas.findIndex(function(c){ return c.id == id; });
+        m.corridas[idx] = Object.assign({}, m.corridas[idx], dados);
+    } else {
+        m.corridas.push(Object.assign({ id: Date.now() }, dados));
+    }
+    limparCamposCorrida(); salvarDados();
+}
+function editCorrida(id) {
+    var c = dbMes().corridas.find(function(i){ return i.id == id; });
+    document.getElementById('co-id').value    = c.id;
+    document.getElementById('co-data').value  = c.data;
+    document.getElementById('co-in').value    = c.in;
+    document.getElementById('co-out').value   = c.out || '';
+    document.getElementById('co-km').value    = c.km;
+    document.getElementById('co-setor').value = c.setor || '';
+    document.getElementById('btn-save-co').innerText = 'Atualizar Corrida';
+    document.getElementById('btn-cancel-co').style.display = 'inline-block';
+    abrirFormCorrida();
+}
+function limparCamposCorrida() {
+    ['co-id','co-in','co-out','co-km','co-setor'].forEach(function(id){ document.getElementById(id).value = ''; });
+    document.getElementById('co-data').value = hoje();
+    document.getElementById('btn-save-co').innerText = 'Salvar Corrida';
+    document.getElementById('btn-cancel-co').style.display = 'none';
+}
+
+/* ── EXCLUSAO ── */
+function del(type, id) {
+    confirmarDel(type === 'exames' ? 'Excluir este exame?' : 'Excluir esta corrida?', function() {
+        allData.meses[mesAtual][type] = allData.meses[mesAtual][type].filter(function(i){ return i.id !== id; });
+        salvarDados();
+    });
+}
+function confirmarDel(msg, cb) {
+    document.getElementById('modal-del-msg').textContent = msg;
+    document.getElementById('modal-del-confirm').onclick = function(){ fecharModal('modal-del'); cb(); };
+    abrirModal('modal-del');
+}
+
+/* ── TOGGLE TABELA EXAMES ── */
+var _tblEx = false;
+function toggleTabelaExames() {
+    _tblEx = !_tblEx;
+    document.getElementById('tbl-exames-wrapper').style.display = _tblEx ? 'block' : 'none';
+    document.getElementById('btn-toggle-tbl-ex').textContent = _tblEx ? 'Ocultar' : 'Mostrar';
+}
+
+/* ── RENDER ── */
+function render() {
+    var d = dbMes();
+    document.querySelector('#tbl-exames tbody').innerHTML = d.exames.map(function(ex) {
+        return '<tr><td>' + fmtD(ex.data) + '</td><td>' + ex.hora + '</td><td>' + ex.setor + '</td><td>' + ex.nome + '</td><td>' + ex.pac + '</td>'
+             + '<td><button class="btn-mini" style="background:#f9a825;color:#000" onclick="editExame(' + ex.id + ')">Editar</button> '
+             + '<button class="btn-mini" style="background:#c62828" onclick="del(\'exames\',' + ex.id + ')">Excluir</button></td></tr>';
+    }).join('');
+    var ce = document.getElementById('exames-count');
+    if (ce) ce.textContent = d.exames.length;
+    document.querySelector('#tbl-corridas tbody').innerHTML = d.corridas.map(function(co) {
+        return '<tr class="' + (!co.out ? 'aberta' : '') + '">'
+             + '<td>' + fmtD(co.data) + '</td><td>' + co.in + '</td>'
+             + '<td>' + (co.out || '<span style="color:#e65100;font-weight:600">em aberto</span>') + '</td>'
+             + '<td>' + co.tempo + '</td><td>' + co.km + '</td><td>' + (co.setor||'') + '</td>'
+             + '<td><button class="btn-mini" style="background:#f9a825;color:#000" onclick="editCorrida(' + co.id + ')">Editar</button> '
+             + '<button class="btn-mini" style="background:#c62828" onclick="del(\'corridas\',' + co.id + ')">Excluir</button></td></tr>';
+    }).join('');
+}
+
+/* ── RESUMO ── */
+function renderResumo() {
+    var d = dbMes();
+    if (!d.escalas.length) {
+        document.getElementById('resumo-conteudo').innerHTML = '<p style="color:#90a4ae;padding:20px">Nenhuma escala cadastrada.</p>';
+        return;
+    }
+    var tKM = 0, tTrab = 0, tEsc = 0, html = '';
+    d.escalas.forEach(function(esc, i) {
+        var em = calcDiffFull(esc.data, esc.in, esc.dataF, esc.out); tEsc += em;
+        var dtIn  = new Date(esc.data  + 'T' + esc.in);
+        var dtOut = new Date(esc.dataF + 'T' + esc.out);
+        var cors  = d.corridas.filter(function(co){ var dt = new Date(co.data+'T'+co.in); return dt>=dtIn && dt<=dtOut; });
+        var km    = cors.reduce(function(s,c){ return s+(parseFloat(c.km)||0); }, 0);
+        var tr    = cors.reduce(function(s,c){ var p=(c.tempo||'0:0').split(':').map(Number); return s+p[0]*60+p[1]; }, 0);
+        tKM += km; tTrab += tr;
+        html += '<div class="resumo-card"><h4>Escala ' + (i+1) + ': ' + fmtD(esc.data) + ' ' + esc.in + ' - ' + fmtD(esc.dataF) + ' ' + esc.out + '</h4>'
+             + '<div class="resumo-row"><span>Periodo sobreaviso</span><span>' + fmtMin(em) + '</span></div>'
+             + '<div class="resumo-row"><span>Corridas</span><span>' + cors.length + '</span></div>'
+             + '<div class="resumo-row"><span>Tempo trabalhado</span><span>' + fmtMin(tr) + '</span></div>'
+             + '<div class="resumo-row"><span>KM rodado</span><span>' + km.toFixed(1) + ' km</span></div></div>';
+    });
+    html += '<div class="resumo-card resumo-total"><h4>TOTAL GERAL DO MES</h4>'
+          + '<div class="resumo-row"><span>Total sobreaviso</span><span>' + fmtMin(tEsc) + '</span></div>'
+          + '<div class="resumo-row"><span>Total trabalhado</span><span>' + fmtMin(tTrab) + '</span></div>'
+          + '<div class="resumo-row"><span>Total KM</span><span>' + tKM.toFixed(1) + ' km</span></div>'
+          + '<div class="resumo-row"><span>Total exames</span><span>' + d.exames.length + '</span></div></div>';
+    document.getElementById('resumo-conteudo').innerHTML = html;
+}
+
+/* ── FORM SCROLL ── */
+function abrirFormExame() {
+    document.querySelectorAll('.tab-content,.tab-btn').forEach(function(el){ el.classList.remove('active'); });
+    document.getElementById('exames').classList.add('active');
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    document.getElementById('exames').scrollIntoView({ behavior:'smooth', block:'start' });
+    setTimeout(function(){ document.getElementById('ex-hora').focus(); }, 400);
+}
+function abrirFormCorrida() {
+    document.querySelectorAll('.tab-content,.tab-btn').forEach(function(el){ el.classList.remove('active'); });
+    document.getElementById('corridas').classList.add('active');
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('corridas').scrollIntoView({ behavior:'smooth', block:'start' });
+    setTimeout(function(){ document.getElementById('co-in').focus(); }, 400);
+}
+
+/* ── UTILS ── */
+function calcDiffSimple(s, e) {
+    if (!s || !e) return '00:00';
+    var p1 = s.split(':').map(Number), p2 = e.split(':').map(Number);
+    var min = (p2[0]*60+p2[1]) - (p1[0]*60+p1[1]);
+    if (min < 0) min += 1440;
+    return String(Math.floor(min/60)).padStart(2,'0') + ':' + String(min%60).padStart(2,'0');
+}
+function calcDiffFull(d1, t1, d2, t2) {
+    if (!d1||!t1||!d2||!t2) return 0;
+    return Math.floor((new Date(d2+'T'+t2) - new Date(d1+'T'+t1)) / 60000);
+}
+function fmtMin(min) { return Math.floor(min/60) + 'h ' + (min%60) + 'm'; }
+function fmtD(d) { if (!d) return ''; var p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+
+/* ── MODAIS ── */
+function abrirModal(id)  { document.getElementById(id).classList.add('active'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('active'); }
+
+/* ── HISTORICO ── */
+function abrirHistorico() {
+    document.getElementById('hist-lista').innerHTML = Object.entries(allData.meses).map(function(e) {
+        var id = e[0], m = e[1];
+        return '<div class="hist-item">'
+             + '<input type="checkbox" id="chk_' + id + '" value="' + id + '">'
+             + '<label for="chk_' + id + '" style="flex:1;cursor:pointer">'
+             + '<div class="hist-item-title">' + m.label + '</div>'
+             + '<div class="hist-item-sub">' + m.corridas.length + ' corridas - ' + m.exames.length + ' exames - ' + m.escalas.length + ' escalas</div>'
+             + '</label></div>';
+    }).join('');
+    abrirModal('modal-hist');
+}
+function relatorioHistorico(tipo) {
+    var ids = Array.from(document.querySelectorAll('#hist-lista input:checked')).map(function(el){ return el.value; });
+    if (!ids.length) { alert('Selecione ao menos um mes.'); return; }
+    fecharModal('modal-hist'); gerarRelatorioMeses(ids, tipo);
+}
+
+/* ── RELATORIO ── */
+var _filtroTipo = 'pdf', _filtroModo = 'mes';
+function abrirFiltroRelatorio(tipo) {
+    _filtroTipo = tipo; _filtroModo = 'mes';
+    document.getElementById('modal-filtro-titulo').textContent = tipo === 'pdf' ? 'Gerar PDF' : 'Gerar Relatorio';
+    document.getElementById('btn-filtro-gerar').style.background = tipo === 'pdf' ? '#c62828' : '#4527a0';
+    document.getElementById('filtro-data-entrega').value = hoje();
+    alternarFiltroTipo('mes');
+    var m = allData.meses[mesAtual];
+    var escalas = m ? m.escalas : [];
+    document.getElementById('filtro-escalas-lista').innerHTML = escalas.length
+        ? escalas.map(function(e, i) {
+            return '<div class="filtro-opcao"><input type="checkbox" id="fesc_' + i + '" value="' + i + '">'
+                 + '<label for="fesc_' + i + '">Escala ' + (i+1) + ': ' + fmtD(e.data) + ' ' + e.in + ' - ' + fmtD(e.dataF) + ' ' + e.out + '</label></div>';
+          }).join('')
+        : '<p style="color:#90a4ae;font-size:0.85rem;padding:8px">Nenhuma escala cadastrada.</p>';
+    abrirModal('modal-filtro-rel');
+}
+function alternarFiltroTipo(modo) {
+    _filtroModo = modo;
+    document.getElementById('filtro-mes-area').style.display  = modo === 'mes'    ? 'block' : 'none';
+    document.getElementById('filtro-esc-area').style.display  = modo === 'escala' ? 'block' : 'none';
+    document.getElementById('btn-filtro-mes').classList.toggle('ativo', modo === 'mes');
+    document.getElementById('btn-filtro-esc').classList.toggle('ativo', modo === 'escala');
+}
+function gerarComFiltro() {
+    fecharModal('modal-filtro-rel');
+    var dataEntrega = document.getElementById('filtro-data-entrega').value;
+    if (_filtroModo === 'mes') { gerarRelatorioMeses([mesAtual], _filtroTipo, dataEntrega); return; }
+    var checks = Array.from(document.querySelectorAll('#filtro-escalas-lista input[type=checkbox]:checked'));
+    if (!checks.length) { alert('Selecione ao menos uma escala.'); return; }
+    gerarRelatorioMultiEscala(mesAtual, checks.map(function(c){ return parseInt(c.value); }), _filtroTipo, dataEntrega);
+}
+
+function buildLinhas(mesesIds) {
+    var linhas=[],tKM=0,tTrab=0,tEsc=0,periodo=[];
+    mesesIds.forEach(function(mid) {
+        var m = allData.meses[mid]; if (!m) return;
+        if (mesesIds.length > 1) linhas.push({ tipo:'mes', label:m.label });
+        var itens = [];
+        m.corridas.forEach(function(co) {
+            tKM += parseFloat(co.km)||0;
+            var p = (co.tempo||'0:0').split(':').map(Number); tTrab += p[0]*60+p[1];
+            itens.push({ tipo:'corrida', co:co, dt:new Date(co.data+'T'+(co.in||'00:00')) });
+        });
+        m.exames.forEach(function(ex) {
+            itens.push({ tipo:'exame', ex:ex, dt:new Date(ex.data+'T'+(ex.hora||'00:00')) });
+        });
+        /* Ordena tudo por data/hora - assim nenhum exame fica preso a uma
+           corrida por janela de horario (o que fazia exames sumirem do
+           relatorio quando nao havia corrida cobrindo exatamente aquele horario) */
+        itens.sort(function(a,b){ return a.dt - b.dt; });
+        itens.forEach(function(it){ linhas.push(it); });
+        m.escalas.forEach(function(e){ tEsc += calcDiffFull(e.data,e.in,e.dataF,e.out); });
+        m.escalas.forEach(function(e){ periodo.push(fmtD(e.data)+' a '+fmtD(e.dataF)); });
+    });
+    var periodoUniq = periodo.filter(function(v,i,a){ return a.indexOf(v)===i; }).join(' | ');
+    return { linhas:linhas, tKM:tKM, tTrab:tTrab, tEsc:tEsc, periodo:periodoUniq };
+}
+function buildLinhasEscala(mid, escIdx) {
+    var m = allData.meses[mid]; if (!m) return { linhas:[],tKM:0,tTrab:0,tEsc:0,periodo:'' };
+    var esc = m.escalas[escIdx]; if (!esc) return { linhas:[],tKM:0,tTrab:0,tEsc:0,periodo:'' };
+    var dtEscIn  = new Date(esc.data+'T'+esc.in);
+    var dtEscOut = new Date(esc.dataF+'T'+esc.out);
+    var tEsc = calcDiffFull(esc.data,esc.in,esc.dataF,esc.out);
+    var periodo = fmtD(esc.data)+' '+esc.in+' - '+fmtD(esc.dataF)+' '+esc.out;
+    var tKM=0,tTrab=0;
+    var itens = [];
+    m.corridas.filter(function(co){ var dt=new Date(co.data+'T'+co.in); return dt>=dtEscIn && dt<=dtEscOut; })
+    .forEach(function(co) {
+        tKM += parseFloat(co.km)||0;
+        var p = (co.tempo||'0:0').split(':').map(Number); tTrab += p[0]*60+p[1];
+        itens.push({ tipo:'corrida', co:co, dt:new Date(co.data+'T'+(co.in||'00:00')) });
+    });
+    /* Exame entra no relatorio da escala pela data/hora do exame estar dentro
+       do periodo de sobreaviso - nao depende mais de bater com o horario
+       exato de uma corrida (isso fazia exames sumirem do relatorio) */
+    m.exames.filter(function(ex){
+        var dtEx = new Date(ex.data+'T'+(ex.hora||'00:00'));
+        return dtEx>=dtEscIn && dtEx<=dtEscOut;
+    }).forEach(function(ex){ itens.push({ tipo:'exame', ex:ex, dt:new Date(ex.data+'T'+(ex.hora||'00:00')) }); });
+    itens.sort(function(a,b){ return a.dt - b.dt; });
+    return { linhas:itens, tKM:tKM, tTrab:tTrab, tEsc:tEsc, periodo:periodo };
+}
+function gerarRelatorioMultiEscala(mid, idxs, tipo, dataEntrega) {
+    var m = allData.meses[mid]; if (!m) return;
+    var linhas=[],tKM=0,tTrab=0,tEsc=0,periodos=[];
+    idxs.forEach(function(idx) {
+        var r = buildLinhasEscala(mid, idx);
+        if (idxs.length > 1) linhas.push({ tipo:'mes', label:'Escala '+(idx+1)+': '+r.periodo });
+        linhas = linhas.concat(r.linhas);
+        tKM+=r.tKM; tTrab+=r.tTrab; tEsc+=r.tEsc; periodos.push(r.periodo);
+    });
+    var titulo = m.label + (idxs.length===1 ? ' - Escala '+(idxs[0]+1) : ' - '+idxs.length+' Escalas');
+    _renderRelatorio(linhas, titulo, periodos.join(' | '),
+        'SOBREAVISO: '+fmtMin(tEsc)+' | TRABALHADO: '+fmtMin(tTrab)+' | KM: '+tKM.toFixed(1), tipo, dataEntrega||'');
+}
+function gerarRelatorioMeses(mesesIds, tipo, dataEntrega) {
+    var r = buildLinhas(mesesIds);
+    var titulo = mesesIds.map(function(id){ return (allData.meses[id]&&allData.meses[id].label)||''; }).join(', ');
+    _renderRelatorio(r.linhas, titulo, r.periodo,
+        'TOTAL SOBREAVISO: '+fmtMin(r.tEsc)+' | TRABALHADO: '+fmtMin(r.tTrab)+' | KM: '+r.tKM.toFixed(1), tipo, dataEntrega||'');
+}
+
+/* ── EXIBIR RELATORIO EM MODAL FULLSCREEN ── */
+function _exibirRelatorioModal(htmlContent) {
+    var overlay = document.getElementById('modal-relatorio-view');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'modal-relatorio-view';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:white;display:flex;flex-direction:column;';
+        overlay.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#1565c0;color:white;flex-shrink:0">'
+          + '<span style="font-weight:700;font-size:0.9rem">Relatorio</span>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button id="btn-rel-imprimir" style="background:white;color:#1565c0;border:none;padding:7px 14px;border-radius:7px;font-weight:700;cursor:pointer;font-size:0.8rem">Imprimir</button>'
+          + '<button onclick="document.getElementById(\'modal-relatorio-view\').style.display=\'none\'" '
+          + 'style="background:rgba(255,255,255,0.25);color:white;border:none;padding:7px 14px;border-radius:7px;font-weight:700;cursor:pointer;font-size:0.8rem">Fechar</button>'
+          + '</div></div>'
+          + '<iframe id="rel-iframe" style="flex:1;border:none;width:100%;height:100%"></iframe>';
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+    var iframe = document.getElementById('rel-iframe');
+    iframe.srcdoc = htmlContent;
+    document.getElementById('btn-rel-imprimir').onclick = function() {
+        try { iframe.contentWindow.print(); } catch(ex) { alert('Use o menu do navegador para imprimir.'); }
+    };
+}
+
+function _renderRelatorio(linhas, titulo, periodo, resumoTxt, tipo, dataEntrega) {
+    var entStr = dataEntrega ? '<p><b>DATA DE ENTREGA:</b> ' + fmtD(dataEntrega) + '</p>' : '';
+
+    /* PDF - download direto via blob */
+    if (tipo !== 'print') {
+        try {
+            var jsPDF = window.jspdf.jsPDF;
+            var doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+            doc.setFontSize(13); doc.setFont(undefined,'bold');
+            doc.text('RELATORIO MENSAL DE SOBREAVISO', 105, 14, { align:'center' });
+            doc.setFontSize(9); doc.setFont(undefined,'normal');
+            doc.text('PROFISSIONAL: ' + (allData.user||'').toUpperCase(), 105, 21, { align:'center' });
+            doc.text('REFERENCIA: ' + titulo, 105, 26, { align:'center' });
+            var sy = 31;
+            if (periodo) { doc.text('ESCALAS: '+periodo, 105, sy, { align:'center' }); sy+=5; }
+            if (dataEntrega) { doc.setFont(undefined,'bold'); doc.text('ENTREGA: '+fmtD(dataEntrega),105,sy,{align:'center'}); doc.setFont(undefined,'normal'); sy+=5; }
+            var body = linhas.map(function(l) {
+                if (l.tipo==='mes')     return [{ content:l.label, colSpan:5, styles:{fillColor:[21,101,192],textColor:255,fontStyle:'bold'} }];
+                if (l.tipo==='corrida') return [fmtD(l.co.data), l.co.in+'-'+(l.co.out||'?'), l.co.tempo, l.co.km||'', 'SETOR: '+(l.co.setor||'---')];
+                return [fmtD(l.ex.data), l.ex.hora, '', '', '* '+(l.ex.nome||'')+' ('+(l.ex.pac||'')+')'+(l.ex.setor?' - '+l.ex.setor:'')];
+            });
+            doc.autoTable({
+                startY: sy,
+                head: [['DATA','ENTRADA/SAIDA','TEMPO','KM','SETOR / EXAMES']],
+                body: body,
+                styles: { fontSize:7, cellPadding:2 },
+                headStyles: { fillColor:[21,101,192] },
+                didParseCell: function(d) {
+                    if (d.section==='body' && d.row.raw[1] && !Array.isArray(d.row.raw[0])
+                        && String(d.row.raw[1]).indexOf('-')>=0 && d.row.raw[1]!=='') {
+                        d.cell.styles.fillColor = [221,221,221];
+                        d.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            });
+            var y = doc.lastAutoTable.finalY + 5;
+            doc.setFontSize(8); doc.setFont(undefined,'bold');
+            doc.setFillColor(240,244,248); doc.rect(14,y-3,182,9,'F'); doc.rect(14,y-3,182,9);
+            doc.text(resumoTxt, 16, y+2);
+            var pdfBlob = doc.output('blob');
+            var pdfUrl  = URL.createObjectURL(pdfBlob);
+            var link    = document.createElement('a');
+            link.href     = pdfUrl;
+            link.download = 'relatorio_' + titulo.replace(/\s+/g,'_').replace(/[^\w\-]/g,'') + '.pdf';
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(function(){ document.body.removeChild(link); URL.revokeObjectURL(pdfUrl); }, 3000);
+        } catch(ex) { alert('Erro ao gerar PDF: ' + ex.message); }
+        return;
+    }
+
+    /* Relatorio HTML - exibir em modal */
+    var rows = linhas.map(function(l) {
+        if (l.tipo==='mes')     return '<tr style="background:#1565c0;color:white"><td colspan="5" style="padding:6px;font-weight:bold">'+l.label+'</td></tr>';
+        if (l.tipo==='corrida') return '<tr style="background:#ddd;font-weight:bold"><td>'+fmtD(l.co.data)+'</td><td>'+l.co.in+'-'+(l.co.out||'?')+'</td><td>'+l.co.tempo+'</td><td>'+l.co.km+'</td><td>SETOR: '+(l.co.setor||'---')+'</td></tr>';
+        return '<tr><td>'+fmtD(l.ex.data)+'</td><td>'+(l.ex.hora||'')+'</td><td colspan="2"></td><td style="font-size:8pt;font-style:italic">* '+(l.ex.nome||'')+' ('+(l.ex.pac||'')+')'+(l.ex.setor?' - '+l.ex.setor:'')+'</td></tr>';
+    }).join('');
+    var html = '<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>Relatorio</title>'
+        + '<style>body{font-family:Arial;padding:20px;font-size:9pt}'
+        + '.h{text-align:center;border:2px solid black;padding:10px;margin-bottom:15px}'
+        + 'table{width:100%;border-collapse:collapse}th,td{border:1px solid black;padding:4px;font-size:8pt}'
+        + 'th{background:#1565c0;color:white}.res{border:2px solid black;padding:8px;font-weight:bold;margin-top:10px}'
+        + '@media print{@page{margin:.5cm;size:A4}}</style></head><body>'
+        + '<div class="h"><h2 style="margin:0">RELATORIO MENSAL DE SOBREAVISO</h2>'
+        + '<p><b>PROFISSIONAL:</b> '+(allData.user||'').toUpperCase()+'</p>'
+        + '<p><b>REFERENCIA:</b> '+titulo+'</p>'
+        + (periodo ? '<p><b>ESCALAS:</b> '+periodo+'</p>' : '')
+        + entStr + '</div>'
+        + '<table><thead><tr><th>DATA</th><th>ENTRADA/SAIDA</th><th>TEMPO</th><th>KM</th><th>SETOR / EXAMES</th></tr></thead>'
+        + '<tbody>' + rows + '</tbody></table>'
+        + '<div class="res">' + resumoTxt + '</div>'
+        + '</body></html>';
+    _exibirRelatorioModal(html);
+}
+
+/* ── FICHAS ── */
+function imprimirTodasFichas() {
+    var d = dbMes();
+    if (!d.corridas.length) { alert('Nenhuma corrida registrada neste mes.'); return; }
+    var fichas = d.corridas.map(function(co) {
+        return '<div class="ficha"><div class="fh">FICHA DE CHAMADO / REQUISICAO DE SOBREAVISO</div>'
+             + '<div style="font-size:11pt;line-height:1.8;margin-top:20px">'
+             + '<b>DATA:</b> '+fmtD(co.data)+'<br><b>PROFISSIONAL:</b> '+(allData.user||'').toUpperCase()+'<br>'
+             + '<b>SETOR DO CHAMADO:</b> '+(co.setor||'---')+'<br>'
+             + '<b>ENTRADA:</b> '+co.in+' | <b>SAIDA:</b> '+(co.out||'em aberto')+'<br>'
+             + '<b>TEMPO TOTAL:</b> '+co.tempo+' | <b>KM:</b> '+co.km+'</div>'
+             + '<div style="position:absolute;bottom:30px;width:90%;display:flex;justify-content:space-between">'
+             + '<div style="border-top:1px solid black;width:45%;text-align:center;font-size:8pt">Assinatura Hospital</div>'
+             + '<div style="border-top:1px solid black;width:45%;text-align:center;font-size:8pt">Assinatura Tecnico</div>'
+             + '</div></div>';
+    }).join('');
+    var html = '<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><title>Fichas</title>'
+        + '<style>body{font-family:Arial;padding:10px;margin:0}'
+        + '.ficha{width:100%;height:9.2cm;border:1px dashed black;padding:15px;margin-bottom:.2cm;page-break-inside:avoid;position:relative}'
+        + '.fh{text-align:center;font-weight:bold;border-bottom:1px solid black;padding-bottom:5px;margin-bottom:10px;text-transform:uppercase}'
+        + '@media print{@page{margin:.5cm;size:A4}}</style></head><body>'
+        + fichas + '</body></html>';
+    _exibirRelatorioModal(html);
+}
+
+/* ── GOOGLE DRIVE ── */
+var gToken=null, gFolderId=null, gFileId=null, gTimer=null;
+var GF='SobreavisoRadiologia', GN='backup_radiologia_v2.json';
+
+function setStatus(estado, msg) {
+    var el = document.getElementById('backup-status');
+    el.className = estado; el.textContent = msg;
+}
+function driveDebounce() {
+    if (!gToken) return;
+    clearTimeout(gTimer); gTimer = setTimeout(sincronizarDrive, 2000);
+}
+function conectarGDrive() {
+    if (gToken) { sincronizarDrive(); return; }
+    document.getElementById('drive-email-salvo').value = localStorage.getItem('driveEmail')||'';
+    abrirModal('modal-config-drive');
+}
+function salvarEmailDrive() {
+    var email = document.getElementById('drive-email-salvo').value.trim();
+    if (email) localStorage.setItem('driveEmail', email);
+    fecharModal('modal-config-drive'); _iniciarConexaoDrive();
+}
+function _iniciarConexaoDrive() {
+    try {
+        google.accounts.oauth2.initTokenClient({
+            client_id: '622210262026-ns1eiu5l8lshm0mejb54p4e283c6vafh.apps.googleusercontent.com',
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            hint: localStorage.getItem('driveEmail') || undefined,
+            callback: function(resp) {
+                if (resp.error) { setStatus('error','Erro'); return; }
+                gToken = resp.access_token; setStatus('saving','Conectando...');
+                garantirPasta().then(function(){ return buscarArquivo(); }).then(function() {
+                    if (gFileId) { carregarDoDrive(); } else { sincronizarDrive(); }
+                });
+            }
+        }).requestAccessToken();
+    } catch(ex) { setStatus('error','Erro: '+ex.message); }
+}
+function _tentarReconectarDrive() {
+    var email = localStorage.getItem('driveEmail');
+    if (!email) return;
+    var tentarConectar = function() {
+        if (typeof google === 'undefined' || !google.accounts) { setTimeout(tentarConectar, 800); return; }
+        try {
+            google.accounts.oauth2.initTokenClient({
+                client_id: '622210262026-ns1eiu5l8lshm0mejb54p4e283c6vafh.apps.googleusercontent.com',
+                scope: 'https://www.googleapis.com/auth/drive.file',
+                hint: email,
+                prompt: '',
+                callback: function(resp) {
+                    if (resp.error) return;
+                    gToken = resp.access_token;
+                    setStatus('saving','Sincronizando...');
+                    garantirPasta().then(function(){ return buscarArquivo(); }).then(function() {
+                        if (gFileId) { carregarDoDrive(); } else { sincronizarDrive(); }
+                    });
+                }
+            }).requestAccessToken();
+        } catch(ex) { /* silencioso */ }
+    };
+    setTimeout(tentarConectar, 1200);
+}
+function carregarDoDrive() {
+    setStatus('saving','Carregando...');
+    fetch('https://www.googleapis.com/drive/v3/files/'+gFileId+'?alt=media', { headers:{ Authorization:'Bearer '+gToken } })
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(dd) {
+        var tL = ((allData.sdi && allData.sdi.profissionais) || []).length;
+        var tD = ((dd.sdi && dd.sdi.profissionais) || []).length;
+        if (tD >= tL && confirm('Drive tem dados de ' + tD + ' profissional(is), local tem ' + tL + '. Carregar dados do Drive?')) {
+            allData = dd; if (!allData.usuarios) allData.usuarios = []; salvarLS();
+            iniciarSdiUi();
+            setStatus('ok','Drive carregado'); return;
+        }
+        sincronizarDrive();
+    })
+    .catch(function(){ setStatus('error','Falha ao carregar'); });
+}
+function garantirPasta() {
+    return fetch("https://www.googleapis.com/drive/v3/files?q=name='"+GF+"' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)",
+        { headers:{ Authorization:'Bearer '+gToken } })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (d.files && d.files.length) { gFolderId = d.files[0].id; return; }
+        return fetch('https://www.googleapis.com/drive/v3/files', {
+            method:'POST', headers:{ Authorization:'Bearer '+gToken, 'Content-Type':'application/json' },
+            body: JSON.stringify({ name:GF, mimeType:'application/vnd.google-apps.folder' })
+        }).then(function(r){ return r.json(); }).then(function(d){ gFolderId = d.id; });
+    });
+}
+function buscarArquivo() {
+    return fetch("https://www.googleapis.com/drive/v3/files?q=name='"+GN+"' and '"+gFolderId+"' in parents and trashed=false&fields=files(id)",
+        { headers:{ Authorization:'Bearer '+gToken } })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (d.files && d.files.length) gFileId = d.files[0].id; });
+}
+function sincronizarDrive() {
+    if (!gToken) return;
+    var tot = Object.values(allData.meses).reduce(function(s,m){ return s+m.exames.length+m.corridas.length; },0);
+    if (tot===0 && gFileId) { setStatus('offline','Sem dados'); return; }
+    setStatus('saving','Salvando...');
+    var content = JSON.stringify(allData);
+    var p;
+    if (gFileId) {
+        p = fetch('https://www.googleapis.com/upload/drive/v3/files/'+gFileId+'?uploadType=media', {
+            method:'PATCH', headers:{ Authorization:'Bearer '+gToken, 'Content-Type':'application/json' }, body:content
+        });
+    } else {
+        var form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify({ name:GN, parents:[gFolderId] })],{ type:'application/json' }));
+        form.append('file',     new Blob([content], { type:'application/json' }));
+        p = fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method:'POST', headers:{ Authorization:'Bearer '+gToken }, body:form
+        }).then(function(r){ return r.json(); }).then(function(d){ gFileId=d.id; return { ok:true }; });
+    }
+    p.then(function(r){ if(r && !r.ok && r.status) throw new Error(r.status); })
+    .then(function(){
+        var t = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        setStatus('ok','Drive '+t);
+    })
+    .catch(function(){ setStatus('error','Falha'); });
+}
+function restaurarDoDrive() { abrirModal('modal-rest-drive'); }
+function confirmarRestaurarDrive() {
+    fecharModal('modal-rest-drive');
+    if (gToken) { _forcarCarregarDoDrive(); return; }
+    setStatus('saving','Conectando...');
+    try {
+        google.accounts.oauth2.initTokenClient({
+            client_id:'622210262026-ns1eiu5l8lshm0mejb54p4e283c6vafh.apps.googleusercontent.com',
+            scope:'https://www.googleapis.com/auth/drive.file',
+            hint: localStorage.getItem('driveEmail')||undefined,
+            callback: function(resp) {
+                if (resp.error) { setStatus('error','Erro'); return; }
+                gToken = resp.access_token;
+                garantirPasta().then(function(){ return buscarArquivo(); }).then(function(){ _forcarCarregarDoDrive(); });
+            }
+        }).requestAccessToken();
+    } catch(ex) { setStatus('error','Erro: '+ex.message); }
+}
+function _forcarCarregarDoDrive() {
+    if (!gFileId) { alert('Nenhum backup encontrado no Google Drive.'); setStatus('offline','Sem backup'); return; }
+    setStatus('saving','Restaurando...');
+    fetch('https://www.googleapis.com/drive/v3/files/'+gFileId+'?alt=media', { headers:{ Authorization:'Bearer '+gToken } })
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(dd) {
+        allData = dd; if (!allData.usuarios) allData.usuarios = []; salvarLS();
+        iniciarSdiUi();
+        setStatus('ok','Restaurado');
+    })
+    .catch(function(ex){ setStatus('error','Falha'); alert('Erro: '+ex.message); });
+}
+
+/* ── BACKUP LOCAL ── */
+function fazerBackupLocal() {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(allData)],{ type:'application/json' }));
+    a.download = 'backup_sobreaviso_' + hoje() + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); }, 2000);
+}
+function restaurarBackup(input) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var p = JSON.parse(e.target.result);
+            allData = p.meses ? p : { user:p.user||'', meses:{ ['mes_'+Date.now()]:{ label:'Importado', escalas:p.escalas||[], exames:p.exames||[], corridas:p.corridas||[] } }, usuarios:[] };
+            if (!allData.usuarios) allData.usuarios = [];
+            salvarLS(); location.reload();
+        } catch(ex) { alert('Arquivo invalido.'); }
+    };
+    reader.readAsText(input.files[0]);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SDI — GERENCIAMENTO: Profissionais, Escala Mensal, Sobreaviso
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── NOTIFICAÇÃO TOAST (confirmação visual de ações executadas) ── */
+function sdiToast(msg, tipo) {
+    var wrap = document.getElementById('sdi-toast-wrap');
+    if (!wrap) { return; }
+    var el = document.createElement('div');
+    el.className = 'sdi-toast' + (tipo ? ' ' + tipo : '');
+    el.textContent = msg;
+    wrap.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    setTimeout(function() {
+        el.classList.remove('show');
+        setTimeout(function(){ el.remove(); }, 300);
+    }, 2600);
+}
+
+function sdiInit() {
+    if (!allData.sdi) allData.sdi = { profissionais: [], escalasSobreaviso: {}, escalasMensais: {}, feriados: {}, rotacaoFDS: {} };
+    if (!allData.sdi.profissionais) allData.sdi.profissionais = [];
+    if (!allData.sdi.escalasSobreaviso) allData.sdi.escalasSobreaviso = {};
+    if (!allData.sdi.escalasMensais) allData.sdi.escalasMensais = {};
+    if (!allData.sdi.feriados) allData.sdi.feriados = {};
+    if (!allData.sdi.rotacaoFDS) allData.sdi.rotacaoFDS = {};
+    if (!allData.sdi.trocas) allData.sdi.trocas = {};
+    if (!allData.sdi.observacoes) allData.sdi.observacoes = {};
+    if (!allData.sdi.cores) allData.sdi.cores = sdiCoresPadrao();
+}
+function sdiCoresPadrao() {
+    return {
+        horario: '#bbdefb',
+        dsr: '#eceff1',
+        ferias: '#fff9c4',
+        bh_menos: '#ffe0b2',
+        bh_mais: '#c8e6c9',
+        folga_feriado: '#f8bbd0',
+        atestado: '#d1c4e9',
+        sobreaviso: '#ffcdd2'
+    };
+}
+
+var sdiAno = new Date().getFullYear();
+var sdiMesNum = new Date().getMonth() + 1; /* 1-12 */
+function sdiMesId(ano, mes) { return ano + '-' + String(mes).padStart(2,'0'); }
+function sdiDiasNoMes(ano, mes) { return new Date(ano, mes, 0).getDate(); }
+function sdiDataStr(ano, mes, dia) { return ano + '-' + String(mes).padStart(2,'0') + '-' + String(dia).padStart(2,'0'); }
+function sdiDiaSemana(ano, mes, dia) { return new Date(ano, mes-1, dia).getDay(); } /* 0=Dom..6=Sab */
+
+/* ── PROFISSIONAIS ── */
+function onChangePfAtividade() {
+    var tc = document.getElementById('pf-tc').checked;
+    var sobChk = document.getElementById('pf-sob');
+    sobChk.disabled = !tc;
+    if (!tc) sobChk.checked = false;
+    document.getElementById('pf-subid-wrap').style.display = sobChk.checked ? 'flex' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function(){
+    var s = document.getElementById('pf-sob');
+    if (s) s.addEventListener('change', function(){ document.getElementById('pf-subid-wrap').style.display = s.checked ? 'flex' : 'none'; });
+});
+
+function limparCamposProfissional() {
+    document.getElementById('pf-id').value = '';
+    document.getElementById('pf-nome').value = '';
+    document.getElementById('pf-telefone').value = '';
+    document.getElementById('pf-rx').checked = false;
+    document.getElementById('pf-tc').checked = false;
+    document.getElementById('pf-rm').checked = false;
+    document.getElementById('pf-sob').checked = false;
+    document.getElementById('pf-sob').disabled = true;
+    document.getElementById('pf-subid').value = '';
+    document.getElementById('pf-subid-wrap').style.display = 'none';
+    document.getElementById('btn-cancel-pf').style.display = 'none';
+}
+
+function salvarProfissional() {
+    var nome = document.getElementById('pf-nome').value.trim();
+    if (!nome) { alert('Informe o nome do profissional.'); return; }
+    var telefone = document.getElementById('pf-telefone').value.trim();
+    var rx = document.getElementById('pf-rx').checked;
+    var tc = document.getElementById('pf-tc').checked;
+    var rm = document.getElementById('pf-rm').checked;
+    var sob = document.getElementById('pf-sob').checked;
+    var subId = document.getElementById('pf-subid').value.trim();
+    if (!rx && !tc && !rm) { alert('Selecione ao menos uma atividade (RX, TC ou RM).'); return; }
+    var id = document.getElementById('pf-id').value;
+    if (id) {
+        var p = allData.sdi.profissionais.find(function(x){ return x.id === id; });
+        if (p) { p.nome = nome; p.telefone = telefone; p.rx = rx; p.tc = tc; p.rm = rm; p.sobreaviso = sob; p.subId = subId; }
+    } else {
+        allData.sdi.profissionais.push({ id: 'prof_' + Date.now(), nome: nome, telefone: telefone, rx: rx, tc: tc, rm: rm, sobreaviso: sob, subId: subId });
+    }
+    salvarLS(); limparCamposProfissional(); renderProfissionais();
+    sdiToast('Profissional salvo com sucesso.', 'ok');
+}
+
+function editarProfissional(id) {
+    var p = allData.sdi.profissionais.find(function(x){ return x.id === id; });
+    if (!p) return;
+    document.getElementById('pf-id').value = p.id;
+    document.getElementById('pf-nome').value = p.nome;
+    document.getElementById('pf-telefone').value = p.telefone || '';
+    document.getElementById('pf-rx').checked = !!p.rx;
+    document.getElementById('pf-tc').checked = !!p.tc;
+    document.getElementById('pf-rm').checked = !!p.rm;
+    document.getElementById('pf-sob').disabled = !p.tc;
+    document.getElementById('pf-sob').checked = !!p.sobreaviso;
+    document.getElementById('pf-subid').value = p.subId || '';
+    document.getElementById('pf-subid-wrap').style.display = p.sobreaviso ? 'flex' : 'none';
+    document.getElementById('btn-cancel-pf').style.display = 'inline-block';
+    document.getElementById('sdi-profissionais').scrollIntoView({ behavior: 'smooth' });
+}
+
+function excluirProfissional(id) {
+    confirmarDel('Excluir este profissional do cadastro? As escalas já lançadas para ele não serão apagadas automaticamente.', function() {
+        allData.sdi.profissionais = allData.sdi.profissionais.filter(function(x){ return x.id !== id; });
+        salvarLS(); renderProfissionais();
+    });
+}
+
+function renderProfissionais() {
+    var el = document.getElementById('lista-profissionais');
+    var selEnv = document.getElementById('env-destino');
+    if (selEnv) {
+        selEnv.innerHTML = '<option value="">Todos os profissionais</option>' +
+            allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); })
+            .map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    }
+    if (!el) return;
+    if (allData.sdi.profissionais.length === 0) { el.innerHTML = '<p style="color:#90a4ae;font-size:0.85rem;text-align:center;padding:14px">Nenhum profissional cadastrado.</p>'; return; }
+    el.innerHTML = allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); }).map(function(p) {
+        var tags = '';
+        if (p.rx) tags += '<span class="ptag ptag-rx">RX</span>';
+        if (p.tc) tags += '<span class="ptag ptag-tc">TC</span>';
+        if (p.rm) tags += '<span class="ptag ptag-rm">RM</span>';
+        if (p.sobreaviso) tags += '<span class="ptag ptag-sob">Sobreaviso' + (p.subId ? ' · ' + p.subId : '') + '</span>';
+        return '<div class="prof-list-card">' +
+            '<div class="prof-list-top">' +
+                '<div><div class="prof-list-nome">' + p.nome + '</div>' +
+                    (p.telefone ? '<div class="prof-list-sub">' + p.telefone + '</div>' : '') +
+                    '<div class="prof-tags">' + tags + '</div></div>' +
+                '<div style="display:flex;gap:6px">' +
+                    '<button class="btn-mini" style="background:#2e7d32" onclick="gerarPdfIndividual(\'' + p.id + '\')">PDF</button>' +
+                    '<button class="btn-mini" style="background:#1565c0" onclick="editarProfissional(\'' + p.id + '\')">Editar</button>' +
+                    '<button class="btn-mini" style="background:#c62828" onclick="excluirProfissional(\'' + p.id + '\')">Excluir</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+}
+
+/* ── FERIADOS NACIONAIS (Brasil) ── */
+function sdiPascoa(ano) {
+    /* Algoritmo de Meeus/Jones/Butcher */
+    var a = ano % 19, b = Math.floor(ano/100), c = ano % 100;
+    var d = Math.floor(b/4), e = b%4, f = Math.floor((b+8)/25);
+    var g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15)%30;
+    var i = Math.floor(c/4), k = c%4, l = (32+2*e+2*i-h-k)%7;
+    var m = Math.floor((a+11*h+22*l)/451);
+    var mes = Math.floor((h+l-7*m+114)/31), dia = ((h+l-7*m+114)%31)+1;
+    return new Date(ano, mes-1, dia);
+}
+function sdiAddDias(d, n) { var r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function sdiFmtData(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+function feriadosNacionais(ano) {
+    var f = {};
+    f[ano+'-01-01'] = 'Confraternização Universal';
+    f[ano+'-04-21'] = 'Tiradentes';
+    f[ano+'-05-01'] = 'Dia do Trabalho';
+    f[ano+'-09-07'] = 'Independência do Brasil';
+    f[ano+'-10-12'] = 'Nossa Senhora Aparecida';
+    f[ano+'-11-02'] = 'Finados';
+    f[ano+'-11-15'] = 'Proclamação da República';
+    f[ano+'-11-20'] = 'Consciência Negra';
+    f[ano+'-12-25'] = 'Natal';
+    var pascoa = sdiPascoa(ano);
+    f[sdiFmtData(sdiAddDias(pascoa,-48))] = 'Carnaval (segunda)';
+    f[sdiFmtData(sdiAddDias(pascoa,-47))] = 'Carnaval (terça)';
+    f[sdiFmtData(sdiAddDias(pascoa,-2))]  = 'Sexta-feira Santa';
+    f[sdiFmtData(pascoa)]                 = 'Páscoa';
+    f[sdiFmtData(sdiAddDias(pascoa,60))]  = 'Corpus Christi';
+    return f;
+}
+
+function gerarEscalaAutomatica() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var nacionais = feriadosNacionais(sdiAno);
+    var doMes = {};
+    Object.keys(nacionais).forEach(function(dt){ if (dt.indexOf(mesId) === 0) doMes[dt] = nacionais[dt]; });
+    allData.sdi.feriados[mesId] = doMes;
+    salvarLS();
+    renderEscalaMensal();
+    var nomes = Object.keys(doMes).map(function(dt){ return dt.slice(8,10)+'/'+dt.slice(5,7)+' - '+doMes[dt]; }).join('\n');
+    alert('Feriados nacionais marcados para o mês:\n\n' + (nomes || '(nenhum feriado nacional neste mês)'));
+    if (confirm('Há algum outro feriado (municipal/estadual/facultativo) para inserir manualmente?')) {
+        document.getElementById('fm-data').value = sdiDataStr(sdiAno, sdiMesNum, 1);
+        document.getElementById('fm-nome').value = '';
+        abrirModal('modal-feriado-manual');
+    }
+}
+function confirmarFeriadoManual() {
+    var data = document.getElementById('fm-data').value;
+    var nome = document.getElementById('fm-nome').value.trim();
+    if (!data || !nome) { alert('Preencha data e nome do feriado.'); return; }
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    if (!allData.sdi.feriados[mesId]) allData.sdi.feriados[mesId] = {};
+    allData.sdi.feriados[mesId][data] = nome;
+    salvarLS(); renderEscalaMensal();
+    document.getElementById('fm-data').value = ''; document.getElementById('fm-nome').value = '';
+}
+
+/* ── ESCALA DE SOBREAVISO (fins de semana) ── */
+function sdiListaSobreaviso() { return allData.sdi.profissionais.filter(function(p){ return p.sobreaviso; }); }
+function sdiFinsDeSemana(ano, mes) {
+    var dias = sdiDiasNoMes(ano, mes), out = [];
+    for (var d=1; d<=dias; d++) {
+        var dw = sdiDiaSemana(ano, mes, d);
+        if (dw === 0 || dw === 6) out.push({ dia:d, dataStr: sdiDataStr(ano,mes,d), tipo: dw===6?'SAB':'DOM' });
+    }
+    return out;
+}
+function renderEscalaSobreaviso() {
+    var el = document.getElementById('sdi-sobreaviso-lista');
+    if (!el) return;
+    var lista = sdiListaSobreaviso();
+    if (lista.length === 0) { el.innerHTML = '<p style="color:#90a4ae;font-size:0.85rem">Nenhum profissional marcado para sobreaviso. Cadastre em "Profissionais".</p>'; return; }
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var atual = allData.sdi.escalasSobreaviso[mesId] || {};
+    var fds = sdiFinsDeSemana(sdiAno, sdiMesNum);
+    el.innerHTML = fds.map(function(f) {
+        var opts = lista.map(function(p){ return '<option value="'+p.id+'"'+(atual[f.dataStr]===p.id?' selected':'')+'>'+p.nome+(p.subId?' ('+p.subId+')':'')+'</option>'; }).join('');
+        return '<div class="sob-row"><label>'+String(f.dia).padStart(2,'0')+' '+f.tipo+'</label>' +
+            '<select onchange="setSobreaviso(\''+f.dataStr+'\', this.value)"><option value="">— não definido —</option>'+opts+'</select></div>';
+    }).join('');
+}
+function setSobreaviso(dataStr, profId) {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    if (!allData.sdi.escalasSobreaviso[mesId]) allData.sdi.escalasSobreaviso[mesId] = {};
+    if (profId) allData.sdi.escalasSobreaviso[mesId][dataStr] = profId;
+    else delete allData.sdi.escalasSobreaviso[mesId][dataStr];
+    aplicarBloqueiosSobreaviso();
+    salvarLS(); renderEscalaMensal(); renderTabelaSobreavisoCalendario();
+}
+function autoPreencherSobreaviso() {
+    var lista = sdiListaSobreaviso();
+    if (lista.length === 0) { alert('Cadastre profissionais de sobreaviso primeiro.'); return; }
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var fds = sdiFinsDeSemana(sdiAno, sdiMesNum);
+    var mesAnteriorNum = sdiMesNum === 1 ? 12 : sdiMesNum-1, mesAnteriorAno = sdiMesNum === 1 ? sdiAno-1 : sdiAno;
+    var mesAntId = sdiMesId(mesAnteriorAno, mesAnteriorNum);
+    var anterior = allData.sdi.escalasSobreaviso[mesAntId] || {};
+    var ultimoId = null;
+    Object.keys(anterior).sort().forEach(function(dt){ ultimoId = anterior[dt]; });
+    var idx = ultimoId ? lista.findIndex(function(p){ return p.id === ultimoId; }) : -1;
+    if (!allData.sdi.escalasSobreaviso[mesId]) allData.sdi.escalasSobreaviso[mesId] = {};
+    fds.forEach(function(f) {
+        idx = (idx + 1) % lista.length;
+        allData.sdi.escalasSobreaviso[mesId][f.dataStr] = lista[idx].id;
+    });
+    aplicarBloqueiosSobreaviso();
+    salvarLS(); renderEscalaSobreaviso(); renderEscalaMensal(); renderTabelaSobreavisoCalendario();
+    sdiToast('Sobreaviso preenchido automaticamente.', 'ok');
+}
+function aplicarBloqueiosSobreaviso() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var sob = allData.sdi.escalasSobreaviso[mesId] || {};
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    var mm = allData.sdi.escalasMensais[mesId];
+    /* Limpa bloqueios antigos que não têm mais sobreaviso correspondente */
+    Object.keys(mm).forEach(function(profId){
+        Object.keys(mm[profId]).forEach(function(dt){
+            if (mm[profId][dt].tipo === 'sobreaviso' && sob[dt] !== profId) delete mm[profId][dt];
+        });
+    });
+    Object.keys(sob).forEach(function(dataStr) {
+        var profId = sob[dataStr];
+        if (!mm[profId]) mm[profId] = {};
+        mm[profId][dataStr] = { tipo: 'sobreaviso', inicio: '03:00', fim: '02:59', obs: 'Bloqueado por sobreaviso' };
+    });
+}
+
+/* ── SELEÇÃO DE MÊS / ANO DA ESCALA ── */
+function popularSelectSdiMes() {
+    var selAno = document.getElementById('sdi-sel-ano'), selMes = document.getElementById('sdi-sel-mes-num');
+    if (!selAno) return;
+    var anoBase = new Date().getFullYear();
+    selAno.innerHTML = [anoBase-1, anoBase, anoBase+1].map(function(a){ return '<option value="'+a+'"'+(a===sdiAno?' selected':'')+'>'+a+'</option>'; }).join('');
+    var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    selMes.innerHTML = nomesMeses.map(function(n,i){ return '<option value="'+(i+1)+'"'+((i+1)===sdiMesNum?' selected':'')+'>'+n+'</option>'; }).join('');
+}
+function sdiTrocarMes() {
+    sdiAno = parseInt(document.getElementById('sdi-sel-ano').value, 10);
+    sdiMesNum = parseInt(document.getElementById('sdi-sel-mes-num').value, 10);
+    renderTudoSdi();
+}
+function renderTudoSdi() {
+    popularSelectLiProf(); popularSelectLiDia();
+    renderEscalaSobreaviso(); renderEscalaMensal(); renderTabelaSobreavisoCalendario();
+    document.getElementById('rest-alert-box').classList.remove('show');
+    if (document.getElementById('hist-sel-mes')) popularHistoricoSelects();
+    carregarObservacaoSdiUI();
+}
+
+/* ── OBSERVAÇÕES / ORIENTAÇÕES DO MÊS ── */
+function carregarObservacaoSdiUI() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var obs = allData.sdi.observacoes[mesId] || { texto:'', mensal:false, sobreaviso:false };
+    document.getElementById('sdi-obs-texto').value = obs.texto || '';
+    document.getElementById('sdi-obs-mensal').checked = !!obs.mensal;
+    document.getElementById('sdi-obs-sobreaviso').checked = !!obs.sobreaviso;
+    renderObservacoesSdi();
+}
+function salvarObservacaoSdi() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    allData.sdi.observacoes[mesId] = {
+        texto: document.getElementById('sdi-obs-texto').value.trim(),
+        mensal: document.getElementById('sdi-obs-mensal').checked,
+        sobreaviso: document.getElementById('sdi-obs-sobreaviso').checked
+    };
+    salvarLS(); renderObservacoesSdi();
+    sdiToast('Observação salva.', 'ok');
+}
+function renderObservacoesSdi() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var obs = allData.sdi.observacoes[mesId] || { texto:'', mensal:false, sobreaviso:false };
+    var topoMensal = document.getElementById('sdi-obs-topo-mensal');
+    var rodapeSob = document.getElementById('sdi-obs-rodape-sobreaviso');
+    if (topoMensal) topoMensal.textContent = (obs.mensal && obs.texto) ? obs.texto : '';
+    if (rodapeSob) rodapeSob.innerHTML = (obs.sobreaviso && obs.texto) ? ('<b>Observações:</b> ' + obs.texto) : '';
+}
+
+/* ── LANÇAMENTO INDIVIDUAL ── */
+function popularSelectLiProf() {
+    var s = document.getElementById('li-prof'); if (!s) return;
+    s.innerHTML = allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); })
+        .map(function(p){ return '<option value="'+p.id+'">'+p.nome+'</option>'; }).join('');
+}
+function popularSelectLiDia() {
+    var s = document.getElementById('li-dia'); if (!s) return;
+    var n = sdiDiasNoMes(sdiAno, sdiMesNum), out = [];
+    for (var d=1; d<=n; d++) out.push('<option value="'+d+'">Dia '+String(d).padStart(2,'0')+'</option>');
+    s.innerHTML = out.join('');
+}
+function onChangeLiTipo() {
+    var horario = document.getElementById('li-tipo').value === 'horario';
+    document.getElementById('li-inicio-wrap').style.display = horario ? 'flex' : 'none';
+    document.getElementById('li-fim-wrap').style.display = horario ? 'flex' : 'none';
+}
+function lancarIndividual() {
+    var profId = document.getElementById('li-prof').value;
+    var dia = parseInt(document.getElementById('li-dia').value, 10);
+    var tipo = document.getElementById('li-tipo').value;
+    if (!profId) { alert('Selecione um profissional.'); return; }
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var dataStr = sdiDataStr(sdiAno, sdiMesNum, dia);
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    if (!allData.sdi.escalasMensais[mesId][profId]) allData.sdi.escalasMensais[mesId][profId] = {};
+    var existente = allData.sdi.escalasMensais[mesId][profId][dataStr];
+    if (existente && existente.tipo === 'sobreaviso') { alert('Este dia está bloqueado por sobreaviso para este profissional.'); return; }
+    var entrada = { tipo: tipo };
+    if (tipo === 'horario') {
+        var ini = document.getElementById('li-inicio').value, fim = document.getElementById('li-fim').value;
+        if (!ini || !fim) { alert('Informe início e fim do horário.'); return; }
+        entrada.inicio = ini; entrada.fim = fim;
+    }
+    if (existente) registrarTroca(mesId, profId, dataStr, existente, entrada);
+    allData.sdi.escalasMensais[mesId][profId][dataStr] = entrada;
+    salvarLS(); renderEscalaMensal();
+    sdiToast('Lançamento salvo.', 'ok');
+}
+
+/* ── LANÇAMENTO AUTOMÁTICO (RX) — repete padrão do mês anterior e alterna fim de semana ── */
+function lancarAutomaticoDemais() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var mesAnteriorNum = sdiMesNum === 1 ? 12 : sdiMesNum-1, mesAnteriorAno = sdiMesNum === 1 ? sdiAno-1 : sdiAno;
+    var mesAntId = sdiMesId(mesAnteriorAno, mesAnteriorNum);
+    var antMensal = allData.sdi.escalasMensais[mesAntId] || {};
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    var mm = allData.sdi.escalasMensais[mesId];
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var diasAntMes = sdiDiasNoMes(mesAnteriorAno, mesAnteriorNum);
+
+    allData.sdi.profissionais.filter(function(p){ return p.rx; }).forEach(function(p) {
+        if (!mm[p.id]) mm[p.id] = {};
+        var histAnt = antMensal[p.id] || {};
+
+        /* Padrão de dia útil: valor mais frequente entre os lançamentos de seg-sex do mês anterior */
+        var contagem = {};
+        for (var d=1; d<=diasAntMes; d++) {
+            var dw = sdiDiaSemana(mesAnteriorAno, mesAnteriorNum, d);
+            if (dw>=1 && dw<=5) {
+                var e = histAnt[sdiDataStr(mesAnteriorAno, mesAnteriorNum, d)];
+                if (e && e.tipo === 'horario') {
+                    var chave = e.inicio+'-'+e.fim;
+                    contagem[chave] = (contagem[chave]||0)+1;
+                }
+            }
+        }
+        var padraoUtil = null, max = 0;
+        Object.keys(contagem).forEach(function(k){ if (contagem[k]>max) { max=contagem[k]; padraoUtil=k; } });
+
+        /* Ciclo de turnos de fim de semana, na ordem cronológica em que apareceram no mês anterior */
+        var ciclo = [], vistos = {};
+        for (var d2=1; d2<=diasAntMes; d2++) {
+            var dw2 = sdiDiaSemana(mesAnteriorAno, mesAnteriorNum, d2);
+            if (dw2===0 || dw2===6) {
+                var e2 = histAnt[sdiDataStr(mesAnteriorAno, mesAnteriorNum, d2)];
+                var chave2 = e2 ? (e2.tipo==='horario' ? e2.inicio+'-'+e2.fim : e2.tipo.toUpperCase()) : null;
+                if (chave2 && !vistos[chave2]) { vistos[chave2] = true; ciclo.push({ chave: chave2, ehHorario: e2.tipo==='horario', inicio:e2.inicio, fim:e2.fim, tipo:e2.tipo }); }
+            }
+        }
+        /* índice do último turno de fim de semana usado no mês anterior */
+        var ultimoIdx = -1;
+        for (var d3=diasAntMes; d3>=1; d3--) {
+            var dw3 = sdiDiaSemana(mesAnteriorAno, mesAnteriorNum, d3);
+            if (dw3===0 || dw3===6) {
+                var e3 = histAnt[sdiDataStr(mesAnteriorAno, mesAnteriorNum, d3)];
+                if (e3) {
+                    var chave3 = e3.tipo==='horario' ? e3.inicio+'-'+e3.fim : e3.tipo.toUpperCase();
+                    var pos = ciclo.findIndex(function(c){ return c.chave===chave3; });
+                    if (pos>=0) { ultimoIdx = pos; }
+                    break;
+                }
+            }
+        }
+        var cicloIdx = ultimoIdx;
+        var ultimoFoiDom = true; /* assume que o mês virou depois de um domingo; força avanço no 1º fds se necessário */
+
+        for (var d4=1; d4<=diasNoMes; d4++) {
+            var dataStr = sdiDataStr(sdiAno, sdiMesNum, d4);
+            if (mm[p.id][dataStr] && mm[p.id][dataStr].tipo === 'sobreaviso') continue; /* nunca sobrescreve bloqueio */
+            var dw4 = sdiDiaSemana(sdiAno, sdiMesNum, d4);
+            if (dw4>=1 && dw4<=5) {
+                if (padraoUtil) {
+                    var partes = padraoUtil.split('-');
+                    mm[p.id][dataStr] = { tipo:'horario', inicio:partes[0], fim:partes[1] };
+                }
+            } else if (ciclo.length > 0) {
+                if (ultimoFoiDom) { cicloIdx = (cicloIdx+1) % ciclo.length; ultimoFoiDom = false; } else { ultimoFoiDom = true; }
+                var t = ciclo[cicloIdx];
+                if (t.ehHorario) mm[p.id][dataStr] = { tipo:'horario', inicio:t.inicio, fim:t.fim };
+                else mm[p.id][dataStr] = { tipo: t.tipo };
+            }
+        }
+    });
+    salvarLS(); renderEscalaMensal();
+    sdiToast('Lançamento automático concluído. Revise e ajuste se necessário.', 'ok');
+}
+
+/* ── GRADE / RENDER DA ESCALA MENSAL ── */
+function renderEscalaMensal() {
+    var tbl = document.getElementById('tbl-escala-mensal'); if (!tbl) return;
+    sdiInit();
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    document.getElementById('sdi-mes-label-title').textContent = '— ' + nomesMeses[sdiMesNum-1] + '/' + sdiAno;
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var feriados = allData.sdi.feriados[mesId] || {};
+    var profs = allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    var mm = allData.sdi.escalasMensais[mesId] || {};
+
+    var thead = '<tr><th class="prof-col">Profissional</th>';
+    for (var d=1; d<=diasNoMes; d++) {
+        var dw = sdiDiaSemana(sdiAno, sdiMesNum, d);
+        var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+        var cls = feriados[dataStr] ? 'feriado' : ((dw===0||dw===6) ? 'finde' : '');
+        var abrev = ['D','S','T','Q','Q','S','S'][dw];
+        thead += '<th class="'+cls+'" title="'+(feriados[dataStr]||'')+'">'+String(d).padStart(2,'0')+'<br>'+abrev+'</th>';
+    }
+    thead += '</tr>';
+    tbl.querySelector('thead').innerHTML = thead;
+
+    if (profs.length === 0) {
+        tbl.querySelector('tbody').innerHTML = '<tr><td colspan="1" style="padding:14px;color:#90a4ae">Cadastre profissionais na aba "Profissionais".</td></tr>';
+        return;
+    }
+    var tbody = profs.map(function(p) {
+        var row = '<tr>' +
+            '<td class="prof-col" draggable="true" data-prof-id="' + p.id + '"' +
+            ' ondragstart="sdiDragStart(event)" ondragover="sdiDragOver(event)"' +
+            ' ondrop="sdiDrop(event)" ondragend="sdiDragEnd(event)">' + p.nome + '</td>';
+        for (var d2=1; d2<=diasNoMes; d2++) {
+            var dataStr2 = sdiDataStr(sdiAno, sdiMesNum, d2);
+            var e = (mm[p.id]||{})[dataStr2];
+            var cls2 = 'dia-cel', txt = '', corBg = '';
+            if (e) {
+                if (e.tipo === 'sobreaviso') { cls2 += ' bloqueado'; txt = 'SOBR'; }
+                else if (e.tipo === 'horario') { txt = e.inicio+'-'+e.fim; }
+                else { txt = sdiTextoEntrada(e); }
+                corBg = sdiCorDoTipo(e.tipo);
+            }
+            if (feriados[dataStr2] && e && e.tipo!=='sobreaviso') cls2 += ' feriado-cel';
+            var estilo = corBg ? ' style="background:' + corBg + '"' : '';
+            row += '<td class="'+cls2+'"'+estilo+' onclick="abrirEdicaoDia(\''+p.id+'\',\''+dataStr2+'\')">'+txt+'</td>';
+        }
+        return row + '</tr>';
+    }).join('');
+    tbl.querySelector('tbody').innerHTML = tbody;
+    renderGradeImpressao(profs, diasNoMes, feriados, mm);
+    var legEl = document.getElementById('sdi-legenda');
+    if (legEl) legEl.innerHTML = SDI_LEGENDA.map(function(l){ return '<span><b>' + l.cod + '</b> = ' + l.label + '</span>'; }).join('');
+    renderObservacoesSdi();
+}
+
+function renderGradeImpressao(profs, diasNoMes, feriados, mm) {
+    var tblP = document.getElementById('tbl-escala-mensal-print'); if (!tblP) return;
+    var diasSemanaAbrev = ['D','S','T','Q','Q','S','S'];
+    var theadP = '<tr><th>Dia</th><th>Sem</th>' + profs.map(function(p){ return '<th class="prof-col">' + p.nome + '</th>'; }).join('') + '</tr>';
+    var linhasP = '';
+    for (var d=1; d<=diasNoMes; d++) {
+        var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+        var dw = sdiDiaSemana(sdiAno, sdiMesNum, d);
+        var cls = feriados[dataStr] ? ' style="background:#fff3e0"' : '';
+        linhasP += '<tr' + cls + '><td><b>' + String(d).padStart(2,'0') + '</b></td><td>' + diasSemanaAbrev[dw] + '</td>';
+        profs.forEach(function(p) {
+            var e = (mm[p.id]||{})[dataStr];
+            var corBg = e ? sdiCorDoTipo(e.tipo) : '';
+            var estilo = corBg ? ' style="background:' + corBg + '"' : '';
+            linhasP += '<td' + estilo + '>' + (e ? sdiTextoCompacto(e) : '') + '</td>';
+        });
+        linhasP += '</tr>';
+    }
+    tblP.querySelector('thead').innerHTML = theadP;
+    tblP.querySelector('tbody').innerHTML = linhasP;
+}
+
+var _edProfId = null, _edDataStr = null;
+
+var _dragProfId = null;
+function sdiDragStart(ev) {
+    _dragProfId = ev.currentTarget.getAttribute('data-prof-id');
+    ev.currentTarget.classList.add('dragging');
+    ev.dataTransfer.effectAllowed = 'move';
+}
+function sdiDragOver(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.add('drag-over');
+}
+function sdiDragEnd(ev) {
+    var cels = document.querySelectorAll('#tbl-escala-mensal td.prof-col');
+    for (var i=0; i<cels.length; i++) { cels[i].classList.remove('drag-over'); cels[i].classList.remove('dragging'); }
+}
+function sdiDrop(ev) {
+    ev.preventDefault();
+    ev.currentTarget.classList.remove('drag-over');
+    var destinoId = ev.currentTarget.getAttribute('data-prof-id');
+    if (!_dragProfId || destinoId === _dragProfId) return;
+    var pA = allData.sdi.profissionais.find(function(x){ return x.id===_dragProfId; });
+    var pB = allData.sdi.profissionais.find(function(x){ return x.id===destinoId; });
+    if (!pA || !pB) return;
+    if (confirm('Trocar a escala do mes inteiro entre ' + pA.nome + ' e ' + pB.nome + '? Dias bloqueados por sobreaviso nao sao trocados.')) {
+        trocarEscalaEntreProfissionais(_dragProfId, destinoId);
+    }
+}
+function trocarEscalaEntreProfissionais(profIdA, profIdB) {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var mm = allData.sdi.escalasMensais[mesId] || {};
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var horaA = mm[profIdA] || {}, horaB = mm[profIdB] || {};
+    var novoA = {}, novoB = {};
+    for (var d=1; d<=diasNoMes; d++) {
+        var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+        var eA = horaA[dataStr], eB = horaB[dataStr];
+        if (eA && eA.tipo === 'sobreaviso') { novoA[dataStr] = eA; }
+        else if (eB) { novoA[dataStr] = eB; registrarTroca(mesId, profIdA, dataStr, eA, eB); }
+        if (eB && eB.tipo === 'sobreaviso') { novoB[dataStr] = eB; }
+        else if (eA) { novoB[dataStr] = eA; registrarTroca(mesId, profIdB, dataStr, eB, eA); }
+    }
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    allData.sdi.escalasMensais[mesId][profIdA] = novoA;
+    allData.sdi.escalasMensais[mesId][profIdB] = novoB;
+    salvarLS(); renderEscalaMensal();
+    sdiToast('Escalas trocadas entre os profissionais.', 'ok');
+}
+function abrirEdicaoDia(profId, dataStr) {
+    _edProfId = profId; _edDataStr = dataStr;
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var e = ((allData.sdi.escalasMensais[mesId]||{})[profId]||{})[dataStr];
+    var p = allData.sdi.profissionais.find(function(x){ return x.id===profId; });
+    document.getElementById('ed-titulo').textContent = 'Editar — ' + (p?p.nome:'') + ' — ' + dataStr.split('-').reverse().join('/');
+    var bloqueado = e && e.tipo === 'sobreaviso';
+    document.getElementById('ed-bloqueado-aviso').style.display = bloqueado ? 'block' : 'none';
+    document.getElementById('ed-tipo').value = (e && e.tipo!=='sobreaviso') ? e.tipo : 'horario';
+    document.getElementById('ed-tipo').disabled = bloqueado;
+    document.getElementById('ed-inicio').value = (e && e.tipo==='horario') ? e.inicio : '';
+    document.getElementById('ed-fim').value = (e && e.tipo==='horario') ? e.fim : '';
+    onChangeEdTipo();
+    abrirModal('modal-editar-dia');
+}
+function onChangeEdTipo() {
+    var horario = document.getElementById('ed-tipo').value === 'horario';
+    document.getElementById('ed-horario-wrap').style.display = horario ? 'grid' : 'none';
+}
+function salvarEdicaoDia() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var e = ((allData.sdi.escalasMensais[mesId]||{})[_edProfId]||{})[_edDataStr];
+    if (e && e.tipo === 'sobreaviso') { fecharModal('modal-editar-dia'); return; }
+    var tipo = document.getElementById('ed-tipo').value;
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    if (!allData.sdi.escalasMensais[mesId][_edProfId]) allData.sdi.escalasMensais[mesId][_edProfId] = {};
+    var entrada = { tipo: tipo };
+    if (tipo === 'horario') {
+        var ini = document.getElementById('ed-inicio').value, fim = document.getElementById('ed-fim').value;
+        if (!ini || !fim) { alert('Informe início e fim.'); return; }
+        entrada.inicio = ini; entrada.fim = fim;
+    }
+    if (e) registrarTroca(mesId, _edProfId, _edDataStr, e, entrada);
+    allData.sdi.escalasMensais[mesId][_edProfId][_edDataStr] = entrada;
+    salvarLS(); fecharModal('modal-editar-dia'); renderEscalaMensal();
+    sdiToast('Dia atualizado.', 'ok');
+}
+function excluirLancamentoDia() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var e = ((allData.sdi.escalasMensais[mesId]||{})[_edProfId]||{})[_edDataStr];
+    if (e && e.tipo === 'sobreaviso') { fecharModal('modal-editar-dia'); return; }
+    if (e) registrarTroca(mesId, _edProfId, _edDataStr, e, null);
+    if (allData.sdi.escalasMensais[mesId] && allData.sdi.escalasMensais[mesId][_edProfId]) delete allData.sdi.escalasMensais[mesId][_edProfId][_edDataStr];
+    salvarLS(); fecharModal('modal-editar-dia'); renderEscalaMensal();
+    sdiToast('Lançamento removido.', 'ok');
+}
+
+/* ── REGISTRO DE TROCAS (log de alterações após a escala já lançada) ── */
+function sdiTextoEntrada(e) {
+    if (!e) return '';
+    if (e.tipo === 'horario') return e.inicio + '-' + e.fim;
+    var cod = sdiCodigoDoTipo(e.tipo);
+    if (cod) return cod;
+    return (e.obs || e.tipo || '').toUpperCase();
+}
+function sdiHoraCompacta(hhmm) { return (hhmm && hhmm.slice(3) === '00') ? hhmm.slice(0,2) : hhmm; }
+function sdiTextoCompacto(e) {
+    if (!e) return '';
+    if (e.tipo === 'horario') return sdiHoraCompacta(e.inicio) + '-' + sdiHoraCompacta(e.fim);
+    return sdiTextoEntrada(e);
+}
+function registrarTroca(mesId, profId, dataStr, entradaAntiga, entradaNova) {
+    var antigoTxt = sdiTextoEntrada(entradaAntiga), novoTxt = sdiTextoEntrada(entradaNova);
+    if (antigoTxt === novoTxt) return;
+    if (!allData.sdi.trocas) allData.sdi.trocas = {};
+    if (!allData.sdi.trocas[mesId]) allData.sdi.trocas[mesId] = [];
+    allData.sdi.trocas[mesId].push({ ts: new Date().toISOString(), profId: profId, data: dataStr, de: antigoTxt, para: novoTxt });
+}
+
+/* ── ALERTA DE DESCANSO MÍNIMO DE 12H ── */
+function sdiMinutos(hhmm) { var pp = hhmm.split(':'); return parseInt(pp[0],10)*60 + parseInt(pp[1],10); }
+function verificarDescansos() {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var mm = allData.sdi.escalasMensais[mesId] || {};
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var alertas = [];
+    allData.sdi.profissionais.forEach(function(p) {
+        var hist = mm[p.id] || {};
+        for (var d=1; d<diasNoMes; d++) {
+            var e1 = hist[sdiDataStr(sdiAno, sdiMesNum, d)];
+            var e2 = hist[sdiDataStr(sdiAno, sdiMesNum, d+1)];
+            if (!e1 || !e2 || e1.tipo!=='horario' || e2.tipo!=='horario') continue;
+            var fimMin = sdiMinutos(e1.fim); if (sdiMinutos(e1.fim) <= sdiMinutos(e1.inicio)) fimMin += 24*60; /* cruza meia-noite */
+            var inicioProxMin = sdiMinutos(e2.inicio) + 24*60;
+            var descansoMin = inicioProxMin - fimMin;
+            if (descansoMin < 12*60) {
+                alertas.push(p.nome + ': dia ' + String(d).padStart(2,'0') + ' (' + e1.inicio + '-' + e1.fim + ') → dia ' + String(d+1).padStart(2,'0') + ' (' + e2.inicio + '-' + e2.fim + ') — apenas ' + (descansoMin/60).toFixed(1) + 'h de descanso');
+            }
+        }
+    });
+    var box = document.getElementById('rest-alert-box');
+    if (alertas.length === 0) { box.classList.remove('show'); alert('Nenhuma violação de descanso mínimo de 12h encontrada.'); return; }
+    box.innerHTML = '⚠️ <b>' + alertas.length + ' violação(ões) de descanso mínimo de 12h:</b><ul>' + alertas.map(function(a){ return '<li>'+a+'</li>'; }).join('') + '</ul>';
+    box.classList.add('show');
+    box.scrollIntoView({ behavior:'smooth' });
+}
+
+/* ── RELATÓRIO (PDF) E IMPRESSÃO ── */
+function gerarRelatorioSDI() {
+    try {
+        var mesId = sdiMesId(sdiAno, sdiMesNum);
+        var profs = allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+        var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+        /* Retrato aproveita melhor: muitas linhas (dias) e poucas colunas (profissionais) */
+        var formato = profs.length > 22 ? 'a2' : profs.length > 8 ? 'a3' : 'a4';
+        var fonte = profs.length > 22 ? 6.5 : profs.length > 16 ? 7.5 : profs.length > 8 ? 8.5 : 10;
+        var doc = new window.jspdf.jsPDF({ orientation:'portrait', format: formato });
+        var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        doc.setFontSize(14); doc.text('Gerenciamento SDI — Escala Mensal — ' + nomesMeses[sdiMesNum-1] + '/' + sdiAno, 14, 14);
+        var startY = 20;
+        var obs = allData.sdi.observacoes[mesId];
+        if (obs && obs.mensal && obs.texto) {
+            doc.setFontSize(9); doc.setTextColor(21,101,192);
+            doc.text(obs.texto, doc.internal.pageSize.getWidth()/2, 20, { align:'center', maxWidth: doc.internal.pageSize.getWidth()-40 });
+            doc.setTextColor(0,0,0);
+            startY = 26;
+        }
+        var mm = allData.sdi.escalasMensais[mesId] || {};
+        var diasSemanaAbrev = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        var head = [['Dia','Sem'].concat(profs.map(function(p){ return p.nome; }))];
+        var body = [];
+        var tiposMatrix = [];
+        for (var d=1; d<=diasNoMes; d++) {
+            var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+            var row = [String(d).padStart(2,'0'), diasSemanaAbrev[sdiDiaSemana(sdiAno, sdiMesNum, d)]];
+            var tiposLinha = [];
+            profs.forEach(function(p) {
+                var e = (mm[p.id]||{})[dataStr];
+                row.push(e ? sdiTextoCompacto(e) : '');
+                tiposLinha.push(e ? e.tipo : null);
+            });
+            body.push(row);
+            tiposMatrix.push(tiposLinha);
+        }
+        doc.autoTable({
+            head:head, body:body, startY:startY,
+            styles:{ fontSize:fonte, cellPadding:1.2, halign:'center', overflow:'visible' },
+            headStyles:{ fillColor:[21,101,192], fontSize:fonte },
+            columnStyles:{ 0:{fontStyle:'bold'} },
+            tableWidth:'auto', horizontalPageBreak:false, pageBreak:'avoid',
+            margin:{ left:8, right:8 },
+            didParseCell: function(data) {
+                if (data.section === 'body' && data.column.index >= 2) {
+                    var tipo = tiposMatrix[data.row.index] ? tiposMatrix[data.row.index][data.column.index-2] : null;
+                    if (tipo) {
+                        var cor = sdiCorDoTipo(tipo);
+                        if (cor) data.cell.styles.fillColor = sdiHexParaRgb(cor);
+                    }
+                }
+            }
+        });
+        var legY = doc.lastAutoTable.finalY + 6;
+        doc.setFontSize(7);
+        doc.text(SDI_LEGENDA.map(function(l){ return l.cod + ' = ' + l.label; }).join('     '), 14, legY);
+        if (doc.internal.getNumberOfPages() > 1) {
+            sdiToast('Aviso: muitos profissionais para caber em 1 folha — considere reduzir a fonte na impressão do navegador.', 'err');
+        }
+        window.open(doc.output('bloburl'), '_blank');
+    } catch(ex) { alert('Erro ao gerar relatório: ' + ex.message); }
+}
+function imprimirEscalaSDI() {
+    var qtd = allData.sdi.profissionais.length;
+    var formato = qtd > 22 ? 'A2' : qtd > 8 ? 'A3' : 'A4';
+    var fonte = qtd > 22 ? '7pt' : qtd > 16 ? '8pt' : qtd > 8 ? '9pt' : '10pt';
+    document.getElementById('sdi-print-page-css').textContent =
+        '@page { size: ' + formato + ' portrait; margin: 8mm; } ' +
+        'body.print-mensal table.grid-mensal-print { font-size: ' + fonte + ' !important; width: 100%; } ' +
+        'body.print-mensal table.grid-mensal-print th, body.print-mensal table.grid-mensal-print td { padding: 4px 3px !important; }';
+    document.body.classList.add('print-mensal');
+    window.print();
+    setTimeout(function(){
+        document.body.classList.remove('print-mensal');
+        document.getElementById('sdi-print-page-css').textContent = '';
+    }, 500);
+}
+
+/* ── PDF INDIVIDUAL POR PROFISSIONAL ── */
+function sdiNomesMeses() { return ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; }
+function sdiDesenharPaginaProf(doc, p, primeira) {
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var mm = (allData.sdi.escalasMensais[mesId] || {})[p.id] || {};
+    if (!primeira) doc.addPage();
+    doc.setFontSize(13); doc.text('Escala Individual — ' + sdiNomesMeses()[sdiMesNum-1] + '/' + sdiAno, 14, 14);
+    doc.setFontSize(11); doc.text(p.nome + (p.telefone ? ' — ' + p.telefone : ''), 14, 21);
+    var body = [];
+    var diasSemana = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+    for (var d=1; d<=diasNoMes; d++) {
+        var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+        var e = mm[dataStr];
+        body.push([String(d).padStart(2,'0') + '/' + String(sdiMesNum).padStart(2,'0'), diasSemana[sdiDiaSemana(sdiAno, sdiMesNum, d)], sdiTextoEntrada(e)]);
+    }
+    doc.autoTable({ head:[['Dia','Semana','Escala']], body:body, startY:26, styles:{ fontSize:9 }, headStyles:{ fillColor:[21,101,192] } });
+}
+function gerarPdfIndividual(profId) {
+    try {
+        var p = allData.sdi.profissionais.find(function(x){ return x.id===profId; });
+        if (!p) return;
+        var doc = new window.jspdf.jsPDF();
+        sdiDesenharPaginaProf(doc, p, true);
+        doc.save('escala_' + p.nome.replace(/\s+/g,'_') + '_' + sdiMesId(sdiAno, sdiMesNum) + '.pdf');
+        sdiToast('PDF de ' + p.nome + ' gerado.', 'ok');
+    } catch(ex) { sdiToast('Erro ao gerar PDF: ' + ex.message, 'err'); }
+}
+function gerarPdfTodosIndividuais() {
+    try {
+        var profs = allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+        if (profs.length === 0) { alert('Nenhum profissional cadastrado.'); return; }
+        var doc = new window.jspdf.jsPDF();
+        profs.forEach(function(p, i) { sdiDesenharPaginaProf(doc, p, i===0); });
+        doc.save('escalas_individuais_' + sdiMesId(sdiAno, sdiMesNum) + '.pdf');
+        sdiToast('PDFs individuais gerados.', 'ok');
+    } catch(ex) { sdiToast('Erro ao gerar PDFs: ' + ex.message, 'err'); }
+}
+
+/* ── PDF DE SOBREAVISO INDIVIDUAL ── */
+function gerarPdfSobreavisoIndividual(profId) {
+    try {
+        var p = allData.sdi.profissionais.find(function(x){ return x.id===profId; });
+        if (!p) return;
+        var mesId = sdiMesId(sdiAno, sdiMesNum);
+        var atrib = allData.sdi.escalasSobreaviso[mesId] || {};
+        var datas = Object.keys(atrib).filter(function(dt){ return atrib[dt]===profId; }).sort();
+        var doc = new window.jspdf.jsPDF();
+        doc.setFontSize(13); doc.text('Escala de Sobreaviso — ' + sdiNomesMeses()[sdiMesNum-1] + '/' + sdiAno, 14, 14);
+        doc.setFontSize(11); doc.text(p.nome + (p.telefone ? ' — ' + p.telefone : ''), 14, 21);
+        var body = datas.length ? datas.map(function(dt){ return [dt.split('-').reverse().join('/')]; }) : [['Nenhum dia de sobreaviso neste mês']];
+        doc.autoTable({ head:[['Data de Sobreaviso']], body:body, startY:26, styles:{ fontSize:10 }, headStyles:{ fillColor:[230,81,0] } });
+        doc.save('sobreaviso_' + p.nome.replace(/\s+/g,'_') + '_' + mesId + '.pdf');
+        sdiToast('PDF de sobreaviso de ' + p.nome + ' gerado.', 'ok');
+    } catch(ex) { sdiToast('Erro ao gerar PDF: ' + ex.message, 'err'); }
+}
+
+/* ── ENVIO CENTRALIZADO DE ESCALAS (Cadastro) ── */
+function enviarEscalasSdi() {
+    var escala = document.getElementById('env-escala').value;
+    var destino = document.getElementById('env-destino').value;
+    var incluiMensal = (escala === 'mensal' || escala === 'ambas');
+    var incluiSobreaviso = (escala === 'sobreaviso' || escala === 'ambas');
+    if (destino) {
+        if (incluiMensal) gerarPdfIndividual(destino);
+        if (incluiSobreaviso) gerarPdfSobreavisoIndividual(destino);
+    } else {
+        if (incluiMensal) gerarRelatorioSDI();
+        if (incluiSobreaviso) gerarRelatorioSobreavisoSDI();
+    }
+}
+
+/* ── UTILITÁRIOS DE CÓDIGO DE HORÁRIO (usados pelo seed de dados) ── */
+function sdiNormalizarHora(h) {
+    h = h.trim();
+    if (h.indexOf(':') > -1) return h;
+    if (h.length <= 2) return h.padStart(2,'0') + ':00';
+    return h.slice(0,2) + ':' + h.slice(-2);
+}
+function parseCodigoSDI(codRaw) {
+    var cod = (codRaw || '').trim().toUpperCase();
+    if (!cod || cod === '-') return null;
+    if (cod === 'DSR') return { tipo:'dsr' };
+    if (cod === 'FE') return { tipo:'ferias' };
+    if (cod === 'BH-') return { tipo:'bh_menos' };
+    if (cod === 'BH+') return { tipo:'bh_mais' };
+    if (cod === 'FF') return { tipo:'folga_feriado' };
+    if (cod === 'ATEST.' || cod === 'ATEST' || cod === 'ATESTADO') return { tipo:'atestado' };
+    if (cod.indexOf('-') > -1 && /\d/.test(cod)) {
+        var pp = cod.split('-');
+        if (pp.length === 2) return { tipo:'horario', inicio: sdiNormalizarHora(pp[0]), fim: sdiNormalizarHora(pp[1]) };
+    }
+    return { tipo:'outro', obs: cod };
+}
+
+/* legenda oficial de códigos usados na escala */
+var SDI_LEGENDA = [
+    { cod:'DSR',    label:'Descanso Semanal Remunerado' },
+    { cod:'FE',     label:'Férias' },
+    { cod:'BH-',    label:'Folga banco de horas' },
+    { cod:'BH+',    label:'Ajuste de banco de horas' },
+    { cod:'FF',     label:'Folga feriado' },
+    { cod:'Atest.', label:'Atestado' }
+];
+function sdiCodigoDoTipo(tipo) {
+    switch (tipo) {
+        case 'dsr': return 'DSR';
+        case 'ferias': return 'FE';
+        case 'bh_menos': return 'BH-';
+        case 'bh_mais': return 'BH+';
+        case 'folga_feriado': return 'FF';
+        case 'atestado': return 'Atest.';
+        case 'sobreaviso': return 'SOBR';
+        default: return null;
+    }
+}
+
+/* ── PERSONALIZAÇÃO DE CORES POR TIPO DE LANÇAMENTO ── */
+var SDI_TIPOS_COR = [
+    { tipo:'horario',       label:'Horário (trabalhando)' },
+    { tipo:'dsr',            label:'DSR' },
+    { tipo:'ferias',         label:'Férias (FE)' },
+    { tipo:'bh_menos',       label:'Folga banco de horas (BH-)' },
+    { tipo:'bh_mais',        label:'Ajuste banco de horas (BH+)' },
+    { tipo:'folga_feriado',  label:'Folga feriado (FF)' },
+    { tipo:'atestado',       label:'Atestado (Atest.)' },
+    { tipo:'sobreaviso',     label:'Sobreaviso (bloqueado)' }
+];
+function sdiCorDoTipo(tipo) { return (allData.sdi.cores && allData.sdi.cores[tipo]) || sdiCoresPadrao()[tipo] || ''; }
+function sdiHexParaRgb(hex) {
+    hex = (hex || '').replace('#', '');
+    if (hex.length !== 6) return [255,255,255];
+    return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+}
+function toggleCoresSdi() {
+    var card = document.getElementById('sdi-cores-card');
+    var abrir = card.style.display === 'none';
+    card.style.display = abrir ? 'block' : 'none';
+    if (abrir) carregarCoresUI();
+}
+function carregarCoresUI() {
+    var grid = document.getElementById('sdi-cores-grid');
+    grid.innerHTML = SDI_TIPOS_COR.map(function(t) {
+        return '<div class="sdi-cor-item"><input type="color" id="cor-' + t.tipo + '" value="' + sdiCorDoTipo(t.tipo) + '"><span>' + t.label + '</span></div>';
+    }).join('');
+}
+function salvarCoresSdi() {
+    var novasCores = {};
+    SDI_TIPOS_COR.forEach(function(t) { novasCores[t.tipo] = document.getElementById('cor-' + t.tipo).value; });
+    allData.sdi.cores = novasCores;
+    salvarLS();
+    renderEscalaMensal();
+    sdiToast('Cores salvas.', 'ok');
+}
+function restaurarCoresPadraoSdi() {
+    allData.sdi.cores = sdiCoresPadrao();
+    salvarLS();
+    carregarCoresUI();
+    renderEscalaMensal();
+    sdiToast('Cores restauradas ao padrão.', 'ok');
+}
+
+/* ── MIGRAÇÃO: corrige dados já lançados com o mapeamento antigo (FE↔FF trocados) ── */
+function migrarLegendaSdiV1() {
+    if (allData.sdi.migradoLegendaV1) return;
+    Object.keys(allData.sdi.escalasMensais).forEach(function(mesId) {
+        var mesData = allData.sdi.escalasMensais[mesId];
+        Object.keys(mesData).forEach(function(profId) {
+            Object.keys(mesData[profId]).forEach(function(dataStr) {
+                var e = mesData[profId][dataStr];
+                if (e.tipo === 'folga') e.tipo = 'ferias';
+                else if (e.tipo === 'ferias') e.tipo = 'folga_feriado';
+            });
+        });
+    });
+    allData.sdi.migradoLegendaV1 = true;
+    salvarLS();
+}
+
+/* ── SEED INICIAL: profissionais e sobreaviso de Agosto/2026 (a partir da foto) ── */
+function seedSdiInicial() {
+    if (allData.sdi.profissionais.length > 0) return; /* só roda uma vez, se cadastro estiver vazio */
+    var apenasRx = ['Suzana','Mauricio','Cheila','Wanessa','Anderson','Dayana','Kaoany'];
+    var rxTc = ['Vanessa G.','Daniela','Roberto','Carolina','Micheli'];
+    var rxTcSob = ['Willyam','Jéssica','Raissa'];
+    apenasRx.forEach(function(n){ allData.sdi.profissionais.push({ id:'prof_'+Date.now()+'_'+Math.random().toString(36).slice(2), nome:n, telefone:'', rx:true, tc:false, rm:false, sobreaviso:false, subId:'' }); });
+    rxTc.forEach(function(n){ allData.sdi.profissionais.push({ id:'prof_'+Date.now()+'_'+Math.random().toString(36).slice(2), nome:n, telefone:'', rx:true, tc:true, rm:false, sobreaviso:false, subId:'' }); });
+    rxTcSob.forEach(function(n){ allData.sdi.profissionais.push({ id:'prof_'+Date.now()+'_'+Math.random().toString(36).slice(2), nome:n, telefone:'', rx:true, tc:true, rm:false, sobreaviso:true, subId:'' }); });
+
+    var mesId = '2026-08';
+    var willyam = allData.sdi.profissionais.find(function(p){ return p.nome==='Willyam'; });
+    var jessica = allData.sdi.profissionais.find(function(p){ return p.nome==='Jéssica'; });
+    var raissa  = allData.sdi.profissionais.find(function(p){ return p.nome==='Raissa'; });
+    allData.sdi.escalasSobreaviso[mesId] = {
+        '2026-08-01': raissa.id, '2026-08-02': willyam.id,
+        '2026-08-08': jessica.id, '2026-08-09': willyam.id,
+        '2026-08-15': raissa.id, '2026-08-16': jessica.id,
+        '2026-08-22': raissa.id, '2026-08-23': willyam.id,
+        '2026-08-29': jessica.id, '2026-08-30': raissa.id
+    };
+    sdiAno = 2026; sdiMesNum = 8;
+    var nacionais = feriadosNacionais(2026);
+    var doMes = {}; Object.keys(nacionais).forEach(function(dt){ if (dt.indexOf(mesId)===0) doMes[dt] = nacionais[dt]; });
+    allData.sdi.feriados[mesId] = doMes;
+
+    /* Horários reais transcritos da escala impressa de Agosto/2026 — revise e ajuste o que precisar */
+    var horas = {
+        'Suzana':     '15-19,DSR,07-11,07-11,07-11,07-11,07-11,DSR,15-19,07-11,07-11,07-11,07-11,07-11,11-15,DSR,07-11,07-11,07-11,07-11,07-11,DSR,15-19,07-11,07-11,07-11,07-11,07-11,11-15,DSR,07-11',
+        'Mauricio':   '11-15,DSR,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE',
+        'Cheila':     'FE,FE,FE,08-12,08-12,08-12,08-12,DSR,07-11,08-12,08-12,08-12,08-12,08-12,FF,DSR,08-12,08-12,08-12,08-12,08-12,FF,DSR,08-12,08-12,08-12,08-12,08-12,DSR,11-15,08-12',
+        'Wanessa':    'DSR,15-19,13-17,13-17,13-17,13-17,13-17,07-11,DSR,13-17,13-17,13-17,13-17,13-17,15-19,DSR,13-17,13-17,13-17,13-17,13-17,11-15,DSR,13-17,13-17,13-17,13-17,13-17,DSR,15-19,13-17',
+        'Anderson':   'DSR,11-15,15-19,15-19,15-19,15-19,15-19,15-19,DSR,15-19,15-19,15-19,15-19,15-19,07-11,DSR,15-19,15-19,15-19,15-19,15-19,DSR,11-15,15-19,15-19,15-19,15-19,15-19,07-11,DSR,15-19',
+        'Dayana':     'DSR,07-11,12-16,12-16,12-16,12-16,12-16,11-15,DSR,12-16,12-16,12-16,12-16,12-16,DSR,08-12,12-16,12-16,12-16,12-16,12-16,15-19,DSR,12-16,12-16,12-16,12-16,12-16,DSR,07-11,12-16',
+        'Kaoany':     '07-11,DSR,08-12,08-12,08-12,08-12,08-12,DSR,11-15,08-12,08-12,08-12,08-12,08-12,DSR,14-18,08-12,08-12,08-12,08-12,08-12,07-11,DSR,08-12,08-12,08-12,08-12,08-12,15-19,DSR,08-12',
+        'Vanessa G.': '07-11,DSR,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE,FE',
+        'Daniela':    'FE,FE,FE,03-07,03-07,03-07,03-07,DSR,07-11,03-07,03-07,03-07,03-07,03-07,15-19,DSR,03-07,03-07,03-07,03-07,03-07,07-11,DSR,03-07,03-07,03-07,03-07,03-07,DSR,07-11,03-07',
+        'Willyam':    '15-19,DSR,07-11,07-11,07-11,07-11,07-11,15-19,DSR,07-11,07-11,07-11,07-11,07-11,BH-,DSR,07-11,07-11,07-11,07-11,07-11,15-19,DSR,07-11,07-11,07-11,07-11,07-11,DSR,15-19,07-11',
+        'Jéssica':    '11-15,DSR,03-07,11-15,11-15,11-15,11-15,DSR,15-19,11-15,11-15,11-15,11-15,11-15,07-11,DSR,03-07,03-07,03-07,03-07,03-07,DSR,07-11,03-07,03-07,03-07,03-07,03-07,DSR,DSR,03-07',
+        'Raissa':     'DSR,15-19,15-19,15-19,15-19,15-19,15-19,BH-,DSR,15-19,15-19,15-19,15-19,15-19,DSR,15-19,15-19,15-19,15-19,15-19,15-19,DSR,15-19,15-19,15-19,15-19,15-19,15-19,DSR,DSR,15-19',
+        'Roberto':    'BH-,DSR,19-23,19-23,19-23,19-23,19-23,07-11,DSR,19-23,19-23,19-23,19-23,19-23,DSR,11-15,19-23,19-23,19-23,19-23,19-23,DSR,11-15,19-23,19-23,19-23,19-23,19-23,07-11,15-19,19-23',
+        'Carolina':   'DSR,07-11,11-15,23-03,23-03,23-03,23-03,11-15,DSR,23-03,23-03,23-03,23-03,23-03,DSR,07-11,23-03,23-03,23-03,23-03,23-03,23-03,DSR,23-03,23-03,23-03,23-03,23-03,15-19,DSR,23-03',
+        'Micheli':    'DSR,11-15,23-03,14-18,14-18,14-18,14-18,DSR,11-15,14-18,14-18,14-18,14-18,14-18,11-15,DSR,14-18,14-18,14-18,14-18,14-18,14-18,07-11,14-18,14-18,14-18,14-18,14-18,11-15,11-15,14-18'
+    };
+    var diasNoMes = 31;
+    if (!allData.sdi.escalasMensais[mesId]) allData.sdi.escalasMensais[mesId] = {};
+    allData.sdi.profissionais.forEach(function(p) {
+        var linha = horas[p.nome]; if (!linha) return;
+        var codigos = linha.split(',');
+        if (!allData.sdi.escalasMensais[mesId][p.id]) allData.sdi.escalasMensais[mesId][p.id] = {};
+        for (var d = 1; d <= diasNoMes; d++) {
+            var entrada = parseCodigoSDI(codigos[d-1]);
+            if (!entrada) continue;
+            allData.sdi.escalasMensais[mesId][p.id][sdiDataStr(2026, 8, d)] = entrada;
+        }
+    });
+
+    aplicarBloqueiosSobreaviso();
+    salvarLS();
+}
+
+/* ── SUB-NAVEGAÇÃO EM MÓDULOS (Escala Mensal) ── */
+function sdiSubTab(nome) {
+    ['sobreaviso','lancamentos','grade'].forEach(function(n) {
+        document.getElementById('sdi-mod-'+n).style.display = (n===nome) ? 'block' : 'none';
+    });
+    var btns = document.querySelectorAll('#sdi-subnav .sdi-subnav-btn');
+    btns.forEach(function(b){ b.classList.remove('active'); });
+    var idx = ['sobreaviso','lancamentos','grade'].indexOf(nome);
+    if (btns[idx]) btns[idx].classList.add('active');
+    if (nome === 'sobreaviso') renderTabelaSobreavisoCalendario();
+}
+
+/* ── TABELA/RELATÓRIO DEDICADO DE SOBREAVISO (formato calendário, igual à escala original) ── */
+function renderTabelaSobreavisoCalendario() {
+    var tbl = document.getElementById('tbl-escala-sobreaviso'); if (!tbl) return;
+    var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+    var mesId = sdiMesId(sdiAno, sdiMesNum);
+    var atrib = allData.sdi.escalasSobreaviso[mesId] || {};
+    var thead = '<tr><th>Domingo</th><th>Segunda</th><th>Terça</th><th>Quarta</th><th>Quinta</th><th>Sexta</th><th>Sábado</th></tr>';
+    var primeiroDw = sdiDiaSemana(sdiAno, sdiMesNum, 1);
+    var celulas = [];
+    for (var i=0; i<primeiroDw; i++) celulas.push('<td></td>');
+    for (var d=1; d<=diasNoMes; d++) {
+        var dataStr = sdiDataStr(sdiAno, sdiMesNum, d);
+        var profId = atrib[dataStr];
+        var nome = '';
+        if (profId) { var p = allData.sdi.profissionais.find(function(x){ return x.id===profId; }); nome = p ? p.nome.toUpperCase() : ''; }
+        celulas.push('<td style="height:52px;vertical-align:top"><b>'+String(d).padStart(2,'0')+'</b>'+(nome?'<br>'+nome:'')+'</td>');
+    }
+    var linhas = '', semana = [];
+    celulas.forEach(function(c, i) {
+        semana.push(c);
+        if (semana.length === 7) { linhas += '<tr>'+semana.join('')+'</tr>'; semana = []; }
+    });
+    if (semana.length) { while (semana.length<7) semana.push('<td></td>'); linhas += '<tr>'+semana.join('')+'</tr>'; }
+    tbl.querySelector('thead').innerHTML = thead;
+    tbl.querySelector('tbody').innerHTML = linhas;
+    renderObservacoesSdi();
+}
+function gerarRelatorioSobreavisoSDI() {
+    try {
+        renderTabelaSobreavisoCalendario();
+        var doc = new window.jspdf.jsPDF({ orientation:'landscape' });
+        var mesId = sdiMesId(sdiAno, sdiMesNum);
+        var nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        doc.setFontSize(14); doc.text('Escala de Sobreaviso — ' + nomesMeses[sdiMesNum-1] + '/' + sdiAno, 14, 14);
+        var diasNoMes = sdiDiasNoMes(sdiAno, sdiMesNum);
+        var atrib = allData.sdi.escalasSobreaviso[mesId] || {};
+        var head = [['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado']];
+        var primeiroDw = sdiDiaSemana(sdiAno, sdiMesNum, 1);
+        var celulas = []; for (var i=0;i<primeiroDw;i++) celulas.push('');
+        for (var d=1; d<=diasNoMes; d++) {
+            var profId = atrib[sdiDataStr(sdiAno, sdiMesNum, d)];
+            var nome = '';
+            if (profId) { var p = allData.sdi.profissionais.find(function(x){ return x.id===profId; }); nome = p ? p.nome : ''; }
+            celulas.push(String(d).padStart(2,'0') + (nome ? '\n'+nome : ''));
+        }
+        var body = [], semana = [];
+        celulas.forEach(function(c) { semana.push(c); if (semana.length===7) { body.push(semana); semana=[]; } });
+        if (semana.length) { while (semana.length<7) semana.push(''); body.push(semana); }
+        doc.autoTable({ head:head, body:body, startY:20, styles:{ fontSize:9, cellPadding:3, minCellHeight:16, valign:'top' }, headStyles:{ fillColor:[230,81,0] } });
+        var obs = allData.sdi.observacoes[mesId];
+        if (obs && obs.sobreaviso && obs.texto) {
+            var finalY = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(9); doc.setFont(undefined,'bold'); doc.text('Observações:', 14, finalY);
+            doc.setFont(undefined,'normal');
+            doc.text(obs.texto, 14, finalY + 5, { maxWidth: doc.internal.pageSize.getWidth()-28 });
+        }
+        doc.save('escala_sobreaviso_' + mesId + '.pdf');
+    } catch(ex) { alert('Erro ao gerar relatório de sobreaviso: ' + ex.message); }
+}
+function imprimirEscalaSobreavisoSDI() {
+    renderTabelaSobreavisoCalendario();
+    document.body.classList.add('print-sobreaviso');
+    window.print();
+    setTimeout(function(){ document.body.classList.remove('print-sobreaviso'); }, 500);
+}
+
+/* ── HISTÓRICO: por mês e por profissional ── */
+function sdiParseMesId(mesId) { var pp = mesId.split('-'); return { ano: parseInt(pp[0],10), mes: parseInt(pp[1],10) }; }
+function popularHistoricoSelects() {
+    var selMes = document.getElementById('hist-sel-mes'), selProf = document.getElementById('hist-sel-prof');
+    if (!selMes) return;
+    var meses = {};
+    Object.keys(allData.sdi.escalasMensais).forEach(function(m){ meses[m] = true; });
+    Object.keys(allData.sdi.escalasSobreaviso).forEach(function(m){ meses[m] = true; });
+    var lista = Object.keys(meses).sort().reverse();
+    selMes.innerHTML = lista.map(function(m) {
+        var pm = sdiParseMesId(m);
+        return '<option value="' + m + '">' + sdiNomesMeses()[pm.mes-1] + '/' + pm.ano + '</option>';
+    }).join('') || '<option value="">Nenhum mês lançado</option>';
+    selProf.innerHTML = '<option value="">Todos os profissionais</option>' +
+        allData.sdi.profissionais.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); })
+        .map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+}
+function renderHistorico() {
+    var mesId = document.getElementById('hist-sel-mes').value;
+    var profFiltro = document.getElementById('hist-sel-prof').value;
+    var tbl = document.getElementById('tbl-historico-grade');
+    var listaTrocas = document.getElementById('hist-trocas-lista');
+    if (!mesId) { tbl.querySelector('thead').innerHTML=''; tbl.querySelector('tbody').innerHTML=''; listaTrocas.innerHTML='<p style="color:#90a4ae;font-size:0.85rem">Nenhum mês disponível.</p>'; return; }
+    var pm = sdiParseMesId(mesId);
+    var diasNoMes = sdiDiasNoMes(pm.ano, pm.mes);
+    var mm = allData.sdi.escalasMensais[mesId] || {};
+    var profs = allData.sdi.profissionais.slice().filter(function(p){ return !profFiltro || p.id===profFiltro; })
+        .sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+
+    var thead = '<tr><th class="prof-col">Profissional</th>';
+    for (var d=1; d<=diasNoMes; d++) thead += '<th>' + String(d).padStart(2,'0') + '</th>';
+    thead += '</tr>';
+    tbl.querySelector('thead').innerHTML = thead;
+
+    if (profs.length === 0) { tbl.querySelector('tbody').innerHTML = '<tr><td style="padding:10px;color:#90a4ae">Nenhum profissional.</td></tr>'; }
+    else {
+        tbl.querySelector('tbody').innerHTML = profs.map(function(p) {
+            var row = '<tr><td class="prof-col">' + p.nome + '</td>';
+            for (var d2=1; d2<=diasNoMes; d2++) {
+                var e = (mm[p.id]||{})[sdiDataStr(pm.ano, pm.mes, d2)];
+                row += '<td class="dia-cel">' + (e ? sdiTextoEntrada(e) : '') + '</td>';
+            }
+            return row + '</tr>';
+        }).join('');
+    }
+
+    var trocas = (allData.sdi.trocas[mesId] || []).filter(function(t){ return !profFiltro || t.profId===profFiltro; })
+        .slice().sort(function(a,b){ return b.ts.localeCompare(a.ts); });
+    if (trocas.length === 0) { listaTrocas.innerHTML = '<p style="color:#90a4ae;font-size:0.85rem">Nenhuma troca registrada neste mês.</p>'; return; }
+    listaTrocas.innerHTML = trocas.map(function(t) {
+        var p = allData.sdi.profissionais.find(function(x){ return x.id===t.profId; });
+        var dt = new Date(t.ts);
+        var dtTxt = String(dt.getDate()).padStart(2,'0') + '/' + String(dt.getMonth()+1).padStart(2,'0') + ' ' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+        return '<div class="sob-row"><label style="width:auto;flex:0 0 90px">' + dtTxt + '</label>' +
+            '<span style="flex:1">' + (p?p.nome:'—') + ' — dia ' + t.data.slice(8,10) + ': <b>' + t.de + '</b> &rarr; <b>' + t.para + '</b></span></div>';
+    }).join('');
+}
+
+
+function iniciarSdiUi() {
+    sdiInit();
+    migrarLegendaSdiV1();
+    seedSdiInicial();
+    popularSelectSdiMes();
+    renderProfissionais();
+    renderTudoSdi();
+    renderTabelaSobreavisoCalendario();
+    popularHistoricoSelects();
+    renderHistorico();
+}
+
+iniciarApp();
+iniciarSdiUi();
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').catch(function(err) {
+            console.warn('Falha ao registrar service worker:', err);
+        });
+    });
+}
+
+</script>
+<div id="sdi-toast-wrap"></div>
+</body>
+</html>
