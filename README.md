@@ -21,8 +21,8 @@ Cada setor (SDI, Centro Cirúrgico, Emergência, etc.) gerencia sua própria esc
 
 - [x] Repositório criado
 - [x] Código legado do GESTAO-SDI copiado em `/legacy` como referência
-- [ ] Schema do banco (D1) — ver `schema.sql`
-- [ ] Backend de autenticação (Workers)
+- [x] Schema do banco (D1) — ver `schema.sql`
+- [x] Backend de autenticação (Workers) — login, sessão, papéis, setup do primeiro admin
 - [ ] Módulo Admin (branding + gestão de usuários)
 - [ ] Módulo RH (filtros, avisos, bloqueio)
 - [ ] Módulo de setor (escala própria)

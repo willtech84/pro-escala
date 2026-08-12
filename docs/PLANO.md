@@ -16,8 +16,8 @@ Evolução do [GESTAO-SDI](https://github.com/willtech84/GESTAO-SDI), que hoje r
 
 ## Fases
 1. **Fundação:** repositório + schema D1 (`schema.sql`) ✅
-2. **Autenticação:** login com hash de senha, sessão, papéis
-3. **Migração de telas:** extrair do `legacy/gestao-sdi-index.html` os módulos de escala/relatórios e adaptar para multi-setor
+2. **Autenticação:** login com hash de senha (PBKDF2), sessão em D1, papéis (admin/rh/gestor_setor/usuario), `/api/setup` para o primeiro admin, `/api/usuarios` (listar/criar/editar/excluir com regras por papel), `/api/config` (branding) ✅
+3. **Migração de telas:** extrair do `legacy/gestao-sdi-index.html` os módulos de escala/relatórios e adaptar para multi-setor — inclui aqui a importação de escala via Excel (detecção automática de colunas + mapeamento manual) e via imagem
 4. **Módulo Admin:** branding (cor/logo), gestão de usuários e permissões
 5. **Módulo RH:** filtros por setor/data/horário, avisos, bloqueio de usuário
 6. **Módulo Setor:** gestor cria/edita escala do próprio grupo

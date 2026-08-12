@@ -11,10 +11,18 @@ CREATE TABLE IF NOT EXISTS users (
     nome TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     senha_hash TEXT NOT NULL,
+    senha_salt TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('admin', 'rh', 'gestor_setor', 'usuario')),
     setor_id INTEGER REFERENCES setores(id),
     status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'bloqueado')),
     criado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sessoes (
+    token TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    criado_em TEXT NOT NULL,
+    expira_em TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS escalas (

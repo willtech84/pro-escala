@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pro-Escala</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, sans-serif;
+    background: #0f172a; color: #e2e8f0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .card {
+    background: #1e293b; border-radius: 12px; padding: 32px;
+    width: 100%; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p.sub { margin: 0 0 24px; color: #94a3b8; font-size: 14px; }
+  label { display: block; font-size: 13px; margin: 14px 0 4px; color: #cbd5e1; }
+  input {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155;
+    background: #0f172a; color: #e2e8f0; font-size: 14px;
+  }
+  input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+  button {
+    width: 100%; margin-top: 20px; padding: 11px; border: none; border-radius: 8px;
+    background: #6366f1; color: white; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: #4f46e5; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  .msg { margin-top: 14px; font-size: 13px; padding: 10px; border-radius: 8px; }
+  .msg.erro { background: #7f1d1d33; color: #fca5a5; }
+  .msg.ok { background: #14532d33; color: #86efac; }
+  .toggle { margin-top: 18px; text-align: center; font-size: 13px; color: #94a3b8; }
+  .toggle a { color: #818cf8; cursor: pointer; text-decoration: none; }
+  .logado { text-align: center; }
+  .logado h2 { margin-bottom: 4px; }
+  .role { display: inline-block; background: #334155; padding: 3px 10px; border-radius: 999px; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="card" id="app">Carregando...</div>
+
+<script>
+const API = "/api";
+let modo = "login"; // login | setup
+
+function getToken() { return localStorage.getItem("pe_token"); }
+function setToken(t) { t ? localStorage.setItem("pe_token", t) : localStorage.removeItem("pe_token"); }
+
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  const token = getToken();
+  if (token) headers.Authorization = "Bearer " + token;
+  const res = await fetch(API + path, { ...opts, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || "Erro desconhecido");
+  return data;
+}
+
+async function checarSetup() {
+  // tenta /me; se falhar, decide entre login/setup tentando login com corpo vazio (rota /setup responde 403 se ja configurado)
+  const token = getToken();
+  if (token) {
+    try {
+      const { usuario } = await api("/me");
+      renderLogado(usuario);
+      return;
+    } catch { setToken(null); }
+  }
+  renderForm();
+}
+
+function renderForm(erro) {
+  const app = document.getElementById("app");
+  const isSetup = modo === "setup";
+  app.innerHTML = `
+    <h1>Pro-Escala</h1>
+    <p class="sub">${isSetup ? "Configuração inicial — criar conta admin" : "Entrar no sistema"}</p>
+    ${isSetup ? `<label>Nome</label><input id="nome" autocomplete="name" />` : ""}
+    <label>E-mail</label>
+    <input id="email" type="email" autocomplete="username" />
+    <label>Senha</label>
+    <input id="senha" type="password" autocomplete="${isSetup ? "new-password" : "current-password"}" />
+    <button id="btn">${isSetup ? "Criar admin" : "Entrar"}</button>
+    ${erro ? `<div class="msg erro">${erro}</div>` : ""}
+    <div class="toggle">
+      ${isSetup
+        ? `Já tem conta? <a id="toggle">Entrar</a>`
+        : `Primeira vez configurando o sistema? <a id="toggle">Criar admin</a>`}
+    </div>
+  `;
+  document.getElementById("toggle").onclick = () => { modo = isSetup ? "login" : "setup"; renderForm(); };
+  document.getElementById("btn").onclick = submit;
+}
+
+async function submit() {
+  const btn = document.getElementById("btn");
+  btn.disabled = true;
+  try {
+    const email = document.getElementById("email").value;
+    const senha = document.getElementById("senha").value;
+    const body = { email, senha };
+    if (modo === "setup") body.nome = document.getElementById("nome").value;
+    const { token, usuario } = await api(modo === "setup" ? "/setup" : "/login", {
+      method: "POST", body: JSON.stringify(body),
+    });
+    setToken(token);
+    renderLogado(usuario);
+  } catch (e) {
+    renderForm(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderLogado(usuario) {
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <div class="logado">
+      <h2>Olá, ${usuario.nome}</h2>
+      <p class="sub">${usuario.email}</p>
+      <span class="role">${usuario.role}</span>
+      <button id="sair" style="margin-top:24px;background:#334155">Sair</button>
+    </div>
+  `;
+  document.getElementById("sair").onclick = async () => {
+    await api("/logout", { method: "POST" }).catch(() => {});
+    setToken(null);
+    modo = "login";
+    renderForm();
+  };
+}
+
+checarSetup();
+</script>
+</body>
+</html>
