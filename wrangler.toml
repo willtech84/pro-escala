@@ -10,4 +10,4 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "pro-escala"
-database_id = "COLOQUE_AQUI_O_ID_DO_D1_APOS_CRIAR"
+database_id = "544ed6d8-9c18-4bfb-bc5c-f8dc0aafb490"
