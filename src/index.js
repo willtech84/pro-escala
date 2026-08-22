@@ -261,6 +261,63 @@ async function handleApi(req, env, url) {
     return json({ ok: true });
   }
 
+  // POST /escalas/lote — importa varios registros de escala de uma vez (usado pelas telas de importar Excel/imagem)
+  if (path === "/escalas/lote" && method === "POST") {
+    if (!["admin", "rh", "gestor_setor"].includes(usuario.role)) return erro("Sem permissao.", 403);
+    const body = await req.json().catch(() => ({}));
+    const registros = Array.isArray(body.registros) ? body.registros : [];
+    const origem = ["manual", "excel", "ocr", "ia"].includes(body.origem) ? body.origem : "manual";
+    if (!registros.length) return erro("Nenhum registro para importar.");
+    if (registros.length > 1000) return erro("Maximo de 1000 registros por importacao.");
+
+    const REGEX_DATA = /^\d{4}-\d{2}-\d{2}$/;
+    const REGEX_HORA = /^\d{2}:\d{2}$/;
+    let inseridos = 0;
+    const falhas = [];
+
+    for (let i = 0; i < registros.length; i++) {
+      const r = registros[i];
+      const usuarioId = Number(r.usuarioId);
+      const alvo = usuarioId ? await env.DB.prepare("SELECT id, setor_id FROM users WHERE id = ?").bind(usuarioId).first() : null;
+
+      if (!alvo) { falhas.push({ linha: i + 1, motivo: "funcionario nao encontrado" }); continue; }
+      if (usuario.role === "gestor_setor" && alvo.setor_id !== usuario.setor_id) {
+        falhas.push({ linha: i + 1, motivo: "funcionario fora do seu setor" }); continue;
+      }
+      if (!REGEX_DATA.test(r.data)) { falhas.push({ linha: i + 1, motivo: "data invalida (use AAAA-MM-DD)" }); continue; }
+      if (!REGEX_HORA.test(r.horaInicio) || !REGEX_HORA.test(r.horaFim)) {
+        falhas.push({ linha: i + 1, motivo: "horario invalido (use HH:MM)" }); continue;
+      }
+
+      const setorId = alvo.setor_id;
+      if (!setorId) { falhas.push({ linha: i + 1, motivo: "funcionario sem setor definido" }); continue; }
+
+      await env.DB.prepare(
+        "INSERT INTO escalas (setor_id, user_id, data, hora_inicio, hora_fim, tipo, observacao, origem, criado_por) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).bind(setorId, alvo.id, r.data, r.horaInicio, r.horaFim, r.tipo || null, r.observacao || null, origem, usuario.id).run();
+      inseridos++;
+    }
+
+    return json({ inseridos, falhas });
+  }
+
+  // GET /escalas?userId=&de=&ate= — lista escalas com filtros simples
+  if (path === "/escalas" && method === "GET") {
+    const userId = url.searchParams.get("userId");
+    const de = url.searchParams.get("de");
+    const ate = url.searchParams.get("ate");
+    let sql = "SELECT * FROM escalas WHERE 1=1";
+    const binds = [];
+    if (usuario.role === "gestor_setor") { sql += " AND setor_id = ?"; binds.push(usuario.setor_id); }
+    else if (usuario.role === "usuario") { sql += " AND user_id = ?"; binds.push(usuario.id); }
+    if (userId) { sql += " AND user_id = ?"; binds.push(Number(userId)); }
+    if (de) { sql += " AND data >= ?"; binds.push(de); }
+    if (ate) { sql += " AND data <= ?"; binds.push(ate); }
+    sql += " ORDER BY data DESC, hora_inicio DESC LIMIT 500";
+    const { results } = await env.DB.prepare(sql).bind(...binds).all();
+    return json({ escalas: results });
+  }
+
   return erro("Rota nao encontrada.", 404);
 }
 

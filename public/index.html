@@ -57,6 +57,33 @@
   .linha-setores-vazio { font-size: 12.5px; color: #64748b; font-style: italic; }
   .setor-chip { background: #334155; color: #cbd5e1; padding: 3px 11px; border-radius: 999px; font-size: 12.5px; }
 
+  nav.abas { display: flex; gap: 4px; padding: 0 24px; background: #1e293b; border-bottom: 1px solid #334155; }
+  nav.abas .aba {
+    background: transparent; color: #94a3b8; border-radius: 0; padding: 12px 16px;
+    font-weight: 500; border-bottom: 2px solid transparent;
+  }
+  nav.abas .aba:hover { background: #24324a; color: #e2e8f0; }
+  nav.abas .aba.ativa { color: #818cf8; border-bottom-color: #818cf8; }
+
+  .dropzone {
+    border: 2px dashed #334155; border-radius: 10px; padding: 32px; text-align: center;
+    color: #94a3b8; cursor: pointer; margin-bottom: 18px;
+  }
+  .dropzone:hover { border-color: #6366f1; color: #cbd5e1; }
+  .dropzone input { display: none; }
+  .progresso-ocr { background: #334155; border-radius: 999px; height: 8px; overflow: hidden; margin: 12px 0; }
+  .progresso-ocr-barra { background: #6366f1; height: 100%; transition: width .2s; }
+  textarea.texto-ocr {
+    width: 100%; min-height: 140px; background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+    color: #e2e8f0; padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 12.5px; resize: vertical;
+  }
+  table.tabela-revisao input, table.tabela-revisao select { padding: 6px 8px; font-size: 12.5px; }
+  table.tabela-revisao td { padding: 6px 8px; }
+  .aviso-modo {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px;
+    font-size: 12.5px; color: #94a3b8; margin-bottom: 18px;
+  }
+
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #293548; }
   th { color: #94a3b8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
@@ -83,6 +110,7 @@
 <body>
 <div id="app"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
 <script>
 const API = "/api";
 let modo = "login"; // login | setup
@@ -174,6 +202,8 @@ async function sair() {
 }
 
 /* ---------- Shell logado ---------- */
+let telaAtual = "funcionarios";
+
 async function renderShell() {
   const podeGerenciarFuncionarios = ["admin", "rh", "gestor_setor"].includes(usuarioAtual.role);
 
@@ -186,12 +216,21 @@ async function renderShell() {
         <button class="secundario" id="sair">Sair</button>
       </div>
     </header>
+    ${podeGerenciarFuncionarios ? `
+    <nav class="abas">
+      <button class="aba ${telaAtual === "funcionarios" ? "ativa" : ""}" data-aba="funcionarios">Funcionários</button>
+      <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Escala</button>
+    </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
   `;
   document.getElementById("sair").onclick = sair;
 
   if (podeGerenciarFuncionarios) {
-    await renderFuncionarios();
+    document.querySelectorAll(".aba").forEach(b => {
+      b.onclick = () => { telaAtual = b.dataset.aba; renderShell(); };
+    });
+    if (telaAtual === "importar") await renderImportarEscala();
+    else await renderFuncionarios();
   } else {
     document.getElementById("conteudo").innerHTML = `
       <div class="vazio">Você está logado como <strong>${usuarioAtual.role}</strong>. Ainda não há uma tela específica para o seu perfil — em breve.</div>
@@ -426,6 +465,204 @@ async function excluirFuncionario(id) {
     await renderFuncionarios();
   } catch (e) {
     alert("Erro ao excluir: " + e.message);
+  }
+}
+
+/* ---------- Importar Escala (imagem) ---------- */
+// Camada de provedores: hoje so' OCR gratuito. Quando a licenca for vendida/ativada,
+// troca PROVEDOR_ATIVO para "ia" e implementa extrairComIA (chamada a uma API de visao).
+// O resto da tela (revisao/edicao/importacao) nao muda.
+const PROVEDORES_IMPORTACAO = {
+  ocr: { rotulo: "OCR local (gratuito)", extrair: extrairComOCR },
+  ia: { rotulo: "IA com visão (em breve)", extrair: extrairComIA },
+};
+let PROVEDOR_ATIVO = "ocr";
+
+let registrosRevisao = [];
+let textoOcrBruto = "";
+
+async function extrairComOCR(file, onProgress) {
+  if (typeof Tesseract === "undefined") throw new Error("Biblioteca de OCR não carregou. Verifique sua conexão e recarregue a página.");
+  const { data } = await Tesseract.recognize(file, "por", {
+    logger: (m) => { if (m.status === "recognizing text" && onProgress) onProgress(Math.round(m.progress * 100)); },
+  });
+  return data.text;
+}
+
+async function extrairComIA() {
+  throw new Error("Importação por IA ainda não está ativada neste sistema.");
+}
+
+// Parser ingenuo: tenta achar data (dd/mm/aaaa ou aaaa-mm-dd) e horarios (HH:MM) em cada linha.
+// O resto da linha vira o "nome detectado", que o usuario ajusta manualmente na tabela de revisao.
+function linhasParaRegistros(texto) {
+  const REGEX_DATA_BR = /(\d{2})\/(\d{2})\/(\d{4})/;
+  const REGEX_DATA_ISO = /(\d{4})-(\d{2})-(\d{2})/;
+  const REGEX_HORA = /(\d{1,2}):(\d{2})/g;
+
+  return texto.split("\n").map(l => l.trim()).filter(Boolean).map(linha => {
+    let data = "";
+    const mIso = linha.match(REGEX_DATA_ISO);
+    const mBr = linha.match(REGEX_DATA_BR);
+    if (mIso) data = mIso[0];
+    else if (mBr) data = `${mBr[3]}-${mBr[2]}-${mBr[1]}`;
+
+    const horas = [...linha.matchAll(REGEX_HORA)].map(m => `${m[1].padStart(2,"0")}:${m[2]}`);
+    const horaInicio = horas[0] || "";
+    const horaFim = horas[1] || "";
+
+    let nomeDetectado = linha
+      .replace(REGEX_DATA_BR, "").replace(REGEX_DATA_ISO, "")
+      .replace(/\d{1,2}:\d{2}/g, "")
+      .replace(/[-–—|;,]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return { nomeDetectado, usuarioId: "", data, horaInicio, horaFim, tipo: "", observacao: "" };
+  });
+}
+
+function encontrarUsuarioPorNome(nomeDetectado) {
+  if (!nomeDetectado) return "";
+  const termo = nomeDetectado.toLowerCase();
+  const achado = listaUsuarios.find(u => termo.includes(u.nome.toLowerCase()) || u.nome.toLowerCase().includes(termo));
+  return achado ? achado.id : "";
+}
+
+async function renderImportarEscala() {
+  const conteudo = document.getElementById("conteudo");
+  if (!listaUsuarios.length) {
+    try { await carregarDados(); } catch (e) {
+      conteudo.innerHTML = `<div class="msg erro">Erro ao carregar funcionários: ${e.message}</div>`;
+      return;
+    }
+  }
+
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Importar Escala por Imagem</h2></div>
+    <div class="aviso-modo">
+      Modo atual: <strong>${PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].rotulo}</strong> — a leitura é feita no seu navegador e pode errar nomes, datas ou horários.
+      Revise a tabela abaixo com atenção antes de importar. Quando o modo com IA for ativado, a leitura fica bem mais precisa automaticamente.
+    </div>
+    <div class="dropzone" id="dropzone">
+      <div id="dropzone-texto">📷 Clique para escolher uma foto ou print da escala (JPG, PNG)</div>
+      <input type="file" id="input-imagem" accept="image/*" />
+    </div>
+    <div id="area-progresso"></div>
+    <div id="area-texto-bruto"></div>
+    <div id="area-revisao"></div>
+  `;
+
+  const dropzone = document.getElementById("dropzone");
+  const inputImagem = document.getElementById("input-imagem");
+  dropzone.onclick = () => inputImagem.click();
+  inputImagem.onchange = () => { if (inputImagem.files[0]) processarImagem(inputImagem.files[0]); };
+}
+
+async function processarImagem(file) {
+  const areaProgresso = document.getElementById("area-progresso");
+  const dzTexto = document.getElementById("dropzone-texto");
+  dzTexto.textContent = `Processando "${file.name}"...`;
+  areaProgresso.innerHTML = `<div class="progresso-ocr"><div class="progresso-ocr-barra" id="barra-progresso" style="width:0%"></div></div>`;
+
+  try {
+    const texto = await PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].extrair(file, (pct) => {
+      const barra = document.getElementById("barra-progresso");
+      if (barra) barra.style.width = pct + "%";
+    });
+    textoOcrBruto = texto;
+    dzTexto.textContent = "📷 Clique para escolher outra imagem";
+    areaProgresso.innerHTML = "";
+    renderTextoBruto();
+  } catch (e) {
+    dzTexto.textContent = "📷 Clique para escolher uma foto ou print da escala (JPG, PNG)";
+    areaProgresso.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  }
+}
+
+function renderTextoBruto() {
+  const area = document.getElementById("area-texto-bruto");
+  area.innerHTML = `
+    <label>Texto lido da imagem (edite antes de gerar a tabela, se precisar)</label>
+    <textarea class="texto-ocr" id="texto-ocr">${textoOcrBruto}</textarea>
+    <div style="margin-top:10px;"><button id="btn-gerar-linhas">Gerar tabela para revisão</button></div>
+  `;
+  document.getElementById("btn-gerar-linhas").onclick = () => {
+    const texto = document.getElementById("texto-ocr").value;
+    registrosRevisao = linhasParaRegistros(texto).map(r => ({ ...r, usuarioId: encontrarUsuarioPorNome(r.nomeDetectado) }));
+    if (!registrosRevisao.length) registrosRevisao = [{ nomeDetectado: "", usuarioId: "", data: "", horaInicio: "", horaFim: "", tipo: "", observacao: "" }];
+    renderTabelaRevisao();
+  };
+}
+
+function renderTabelaRevisao() {
+  const area = document.getElementById("area-revisao");
+  const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:24px;">
+      <h2 style="font-size:16px;">Revisar antes de importar (${registrosRevisao.length} linhas)</h2>
+      <button class="secundario" id="btn-add-linha">+ Linha</button>
+    </div>
+    <table class="tabela-revisao">
+      <thead><tr><th>Detectado</th><th>Funcionário</th><th>Data</th><th>Início</th><th>Fim</th><th>Tipo</th><th></th></tr></thead>
+      <tbody id="tbody-revisao"></tbody>
+    </table>
+    <div id="feedback-import" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="btn-importar">Importar registros válidos</button></div>
+  `;
+
+  const tbody = document.getElementById("tbody-revisao");
+  registrosRevisao.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.nomeDetectado || "—"}</td>
+      <td><select data-campo="usuarioId" data-i="${i}"><option value="">selecione</option>${opcoesUsuarios}</select></td>
+      <td><input data-campo="data" data-i="${i}" placeholder="AAAA-MM-DD" value="${r.data}" style="width:110px" /></td>
+      <td><input data-campo="horaInicio" data-i="${i}" placeholder="HH:MM" value="${r.horaInicio}" style="width:70px" /></td>
+      <td><input data-campo="horaFim" data-i="${i}" placeholder="HH:MM" value="${r.horaFim}" style="width:70px" /></td>
+      <td><input data-campo="tipo" data-i="${i}" placeholder="turno/tipo" value="${r.tipo}" style="width:100px" /></td>
+      <td><button class="perigo" data-remover="${i}">×</button></td>
+    `;
+    tbody.appendChild(tr);
+    const sel = tr.querySelector(`select[data-campo="usuarioId"]`);
+    sel.value = r.usuarioId || "";
+  });
+
+  tbody.querySelectorAll("[data-campo]").forEach(el => {
+    el.onchange = () => { registrosRevisao[Number(el.dataset.i)][el.dataset.campo] = el.value; };
+  });
+  tbody.querySelectorAll("[data-remover]").forEach(b => {
+    b.onclick = () => { registrosRevisao.splice(Number(b.dataset.remover), 1); renderTabelaRevisao(); };
+  });
+  document.getElementById("btn-add-linha").onclick = () => {
+    registrosRevisao.push({ nomeDetectado: "", usuarioId: "", data: "", horaInicio: "", horaFim: "", tipo: "", observacao: "" });
+    renderTabelaRevisao();
+  };
+  document.getElementById("btn-importar").onclick = confirmarImportacao;
+}
+
+async function confirmarImportacao() {
+  const btn = document.getElementById("btn-importar");
+  const fb = document.getElementById("feedback-import");
+  btn.disabled = true;
+  fb.innerHTML = "";
+  try {
+    const registros = registrosRevisao
+      .filter(r => r.usuarioId && r.data && r.horaInicio && r.horaFim)
+      .map(r => ({ usuarioId: Number(r.usuarioId), data: r.data, horaInicio: r.horaInicio, horaFim: r.horaFim, tipo: r.tipo, observacao: r.observacao }));
+    if (!registros.length) throw new Error("Preencha funcionário, data e horários de pelo menos uma linha.");
+
+    const resultado = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "ocr" }) });
+    let html = `<div class="msg ok">${resultado.inseridos} registro(s) importado(s) com sucesso.</div>`;
+    if (resultado.falhas && resultado.falhas.length) {
+      html += `<div class="msg erro">${resultado.falhas.length} falha(s): ${resultado.falhas.map(f => `linha ${f.linha} (${f.motivo})`).join(", ")}</div>`;
+    }
+    fb.innerHTML = html;
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("btn-importar")) btn.disabled = false;
   }
 }
 

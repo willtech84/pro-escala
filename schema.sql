@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS escalas (
     hora_fim TEXT NOT NULL,
     tipo TEXT,                   -- turno normal, sobreaviso, etc.
     observacao TEXT,
+    origem TEXT NOT NULL DEFAULT 'manual' CHECK (origem IN ('manual', 'excel', 'ocr', 'ia')),
+    criado_por INTEGER REFERENCES users(id),
     criado_em TEXT DEFAULT (datetime('now'))
 );
 
