@@ -9,8 +9,8 @@
   body {
     margin: 0; font-family: system-ui, -apple-system, sans-serif;
     background: #0f172a; color: #e2e8f0; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center; padding: 16px;
   }
+  .center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
   .card {
     background: #1e293b; border-radius: 12px; padding: 32px;
     width: 100%; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,.3);
@@ -18,33 +18,74 @@
   h1 { margin: 0 0 4px; font-size: 22px; }
   p.sub { margin: 0 0 24px; color: #94a3b8; font-size: 14px; }
   label { display: block; font-size: 13px; margin: 14px 0 4px; color: #cbd5e1; }
-  input {
+  input, select {
     width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155;
     background: #0f172a; color: #e2e8f0; font-size: 14px;
   }
-  input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+  input:focus, select:focus { outline: 2px solid #6366f1; border-color: transparent; }
   button {
-    width: 100%; margin-top: 20px; padding: 11px; border: none; border-radius: 8px;
-    background: #6366f1; color: white; font-size: 15px; font-weight: 600; cursor: pointer;
+    padding: 10px 16px; border: none; border-radius: 8px;
+    background: #6366f1; color: white; font-size: 14px; font-weight: 600; cursor: pointer;
   }
   button:hover { background: #4f46e5; }
   button:disabled { opacity: .6; cursor: not-allowed; }
+  button.secundario { background: #334155; }
+  button.secundario:hover { background: #475569; }
+  button.perigo { background: #7f1d1d; }
+  button.perigo:hover { background: #991b1b; }
+  button.full { width: 100%; }
   .msg { margin-top: 14px; font-size: 13px; padding: 10px; border-radius: 8px; }
   .msg.erro { background: #7f1d1d33; color: #fca5a5; }
   .msg.ok { background: #14532d33; color: #86efac; }
   .toggle { margin-top: 18px; text-align: center; font-size: 13px; color: #94a3b8; }
   .toggle a { color: #818cf8; cursor: pointer; text-decoration: none; }
-  .logado { text-align: center; }
-  .logado h2 { margin-bottom: 4px; }
-  .role { display: inline-block; background: #334155; padding: 3px 10px; border-radius: 999px; font-size: 12px; margin-top: 8px; }
+
+  /* Shell logado */
+  header.topo {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; background: #1e293b; border-bottom: 1px solid #334155;
+  }
+  header.topo .marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+  header.topo .usuario-info { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #94a3b8; }
+  .role-badge { background: #334155; padding: 2px 9px; border-radius: 999px; font-size: 11px; color: #cbd5e1; }
+  main.conteudo { padding: 24px; max-width: 1000px; margin: 0 auto; }
+  .cabecalho-lista { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
+  .cabecalho-lista h2 { margin: 0; font-size: 19px; }
+  input#busca { max-width: 240px; }
+
+  table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #293548; }
+  th { color: #94a3b8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #24324a; }
+  td.acoes { display: flex; gap: 8px; }
+  td.acoes button { padding: 6px 10px; font-size: 12.5px; }
+  .status-tag { padding: 2px 9px; border-radius: 999px; font-size: 11.5px; }
+  .status-tag.ativo { background: #14532d55; color: #86efac; }
+  .status-tag.bloqueado { background: #7f1d1d55; color: #fca5a5; }
+  .vazio { text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 14px; }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+  }
+  .modal { background: #1e293b; border-radius: 12px; padding: 26px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; }
+  .modal h3 { margin: 0 0 18px; font-size: 18px; }
+  .modal .rodape { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  .campo-senha-hint { font-size: 12px; color: #64748b; margin-top: 4px; }
 </style>
 </head>
 <body>
-  <div class="card" id="app">Carregando...</div>
+<div id="app"></div>
 
 <script>
 const API = "/api";
 let modo = "login"; // login | setup
+let usuarioAtual = null;
+let listaUsuarios = [];
+let listaSetores = [];
+let editandoId = null;
 
 function getToken() { return localStorage.getItem("pe_token"); }
 function setToken(t) { t ? localStorage.setItem("pe_token", t) : localStorage.removeItem("pe_token"); }
@@ -59,43 +100,47 @@ async function api(path, opts = {}) {
   return data;
 }
 
-async function checarSetup() {
-  // tenta /me; se falhar, decide entre login/setup tentando login com corpo vazio (rota /setup responde 403 se ja configurado)
+const app = document.getElementById("app");
+
+async function iniciar() {
   const token = getToken();
   if (token) {
     try {
       const { usuario } = await api("/me");
-      renderLogado(usuario);
+      usuarioAtual = usuario;
+      await renderShell();
       return;
     } catch { setToken(null); }
   }
-  renderForm();
+  renderAuth();
 }
 
-function renderForm(erro) {
-  const app = document.getElementById("app");
+/* ---------- Login / Setup ---------- */
+function renderAuth(erro) {
   const isSetup = modo === "setup";
   app.innerHTML = `
-    <h1>Pro-Escala</h1>
-    <p class="sub">${isSetup ? "Configuração inicial — criar conta admin" : "Entrar no sistema"}</p>
-    ${isSetup ? `<label>Nome</label><input id="nome" autocomplete="name" />` : ""}
-    <label>E-mail</label>
-    <input id="email" type="email" autocomplete="username" />
-    <label>Senha</label>
-    <input id="senha" type="password" autocomplete="${isSetup ? "new-password" : "current-password"}" />
-    <button id="btn">${isSetup ? "Criar admin" : "Entrar"}</button>
-    ${erro ? `<div class="msg erro">${erro}</div>` : ""}
-    <div class="toggle">
-      ${isSetup
-        ? `Já tem conta? <a id="toggle">Entrar</a>`
-        : `Primeira vez configurando o sistema? <a id="toggle">Criar admin</a>`}
-    </div>
+    <div class="center-screen"><div class="card">
+      <h1>Pro-Escala</h1>
+      <p class="sub">${isSetup ? "Configuração inicial — criar conta admin" : "Entrar no sistema"}</p>
+      ${isSetup ? `<label>Nome</label><input id="nome" autocomplete="name" />` : ""}
+      <label>E-mail</label>
+      <input id="email" type="email" autocomplete="username" />
+      <label>Senha</label>
+      <input id="senha" type="password" autocomplete="${isSetup ? "new-password" : "current-password"}" />
+      <button class="full" style="margin-top:20px" id="btn">${isSetup ? "Criar admin" : "Entrar"}</button>
+      ${erro ? `<div class="msg erro">${erro}</div>` : ""}
+      <div class="toggle">
+        ${isSetup
+          ? `Já tem conta? <a id="toggle">Entrar</a>`
+          : `Primeira vez configurando o sistema? <a id="toggle">Criar admin</a>`}
+      </div>
+    </div></div>
   `;
-  document.getElementById("toggle").onclick = () => { modo = isSetup ? "login" : "setup"; renderForm(); };
-  document.getElementById("btn").onclick = submit;
+  document.getElementById("toggle").onclick = () => { modo = isSetup ? "login" : "setup"; renderAuth(); };
+  document.getElementById("btn").onclick = submitAuth;
 }
 
-async function submit() {
+async function submitAuth() {
   const btn = document.getElementById("btn");
   btn.disabled = true;
   try {
@@ -107,33 +152,265 @@ async function submit() {
       method: "POST", body: JSON.stringify(body),
     });
     setToken(token);
-    renderLogado(usuario);
+    usuarioAtual = usuario;
+    await renderShell();
   } catch (e) {
-    renderForm(e.message);
+    renderAuth(e.message);
   } finally {
-    btn.disabled = false;
+    if (document.getElementById("btn")) btn.disabled = false;
   }
 }
 
-function renderLogado(usuario) {
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    <div class="logado">
-      <h2>Olá, ${usuario.nome}</h2>
-      <p class="sub">${usuario.email}</p>
-      <span class="role">${usuario.role}</span>
-      <button id="sair" style="margin-top:24px;background:#334155">Sair</button>
-    </div>
-  `;
-  document.getElementById("sair").onclick = async () => {
-    await api("/logout", { method: "POST" }).catch(() => {});
-    setToken(null);
-    modo = "login";
-    renderForm();
-  };
+async function sair() {
+  await api("/logout", { method: "POST" }).catch(() => {});
+  setToken(null);
+  usuarioAtual = null;
+  modo = "login";
+  renderAuth();
 }
 
-checarSetup();
+/* ---------- Shell logado ---------- */
+async function renderShell() {
+  const podeGerenciarFuncionarios = ["admin", "rh", "gestor_setor"].includes(usuarioAtual.role);
+
+  app.innerHTML = `
+    <header class="topo">
+      <div class="marca">📋 Pro-Escala</div>
+      <div class="usuario-info">
+        <span>${usuarioAtual.nome}</span>
+        <span class="role-badge">${usuarioAtual.role}</span>
+        <button class="secundario" id="sair">Sair</button>
+      </div>
+    </header>
+    <main class="conteudo" id="conteudo"></main>
+  `;
+  document.getElementById("sair").onclick = sair;
+
+  if (podeGerenciarFuncionarios) {
+    await renderFuncionarios();
+  } else {
+    document.getElementById("conteudo").innerHTML = `
+      <div class="vazio">Você está logado como <strong>${usuarioAtual.role}</strong>. Ainda não há uma tela específica para o seu perfil — em breve.</div>
+    `;
+  }
+}
+
+/* ---------- Tela de Funcionários ---------- */
+async function carregarDados() {
+  const [u, s] = await Promise.all([api("/usuarios"), api("/setores")]);
+  listaUsuarios = u.usuarios;
+  listaSetores = s.setores;
+}
+
+async function renderFuncionarios(filtro = "") {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `<div class="vazio">Carregando...</div>`;
+  try {
+    await carregarDados();
+  } catch (e) {
+    conteudo.innerHTML = `<div class="msg erro">Erro ao carregar: ${e.message}</div>`;
+    return;
+  }
+
+  const podeCriarSetor = usuarioAtual.role === "admin";
+  const termo = filtro.trim().toLowerCase();
+  const filtrados = listaUsuarios.filter(u =>
+    !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
+  );
+
+  const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
+
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista">
+      <h2>Funcionários (${listaUsuarios.length})</h2>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input id="busca" placeholder="Buscar por nome ou e-mail" value="${filtro}" />
+        ${podeCriarSetor ? `<button class="secundario" id="btn-novo-setor">+ Setor</button>` : ""}
+        <button id="btn-novo-func">+ Funcionário</button>
+      </div>
+    </div>
+    ${filtrados.length === 0 ? `<div class="vazio">Nenhum funcionário encontrado.</div>` : `
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setor</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${filtrados.map(u => `
+          <tr>
+            <td>${u.nome}</td>
+            <td>${u.email}</td>
+            <td>${u.role}</td>
+            <td>${setorNome(u.setorId)}</td>
+            <td><span class="status-tag ${u.status}">${u.status}</span></td>
+            <td class="acoes">
+              <button class="secundario" data-editar="${u.id}">Editar</button>
+              ${usuarioAtual.role === "admin" && u.id !== usuarioAtual.id ? `<button class="perigo" data-excluir="${u.id}">Excluir</button>` : ""}
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`}
+  `;
+
+  document.getElementById("busca").oninput = (e) => renderFuncionariosLocal(e.target.value);
+  document.getElementById("btn-novo-func").onclick = () => abrirModalFuncionario(null);
+  const btnSetor = document.getElementById("btn-novo-setor");
+  if (btnSetor) btnSetor.onclick = criarSetorPrompt;
+
+  conteudo.querySelectorAll("[data-editar]").forEach(b => {
+    b.onclick = () => abrirModalFuncionario(Number(b.dataset.editar));
+  });
+  conteudo.querySelectorAll("[data-excluir]").forEach(b => {
+    b.onclick = () => excluirFuncionario(Number(b.dataset.excluir));
+  });
+}
+
+// re-render so filtragem sem bater na API de novo
+function renderFuncionariosLocal(filtro) {
+  const termo = filtro.trim().toLowerCase();
+  const conteudo = document.getElementById("conteudo");
+  const filtrados = listaUsuarios.filter(u =>
+    !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
+  );
+  const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
+  const tbody = conteudo.querySelector("tbody");
+  const tabela = conteudo.querySelector("table");
+  const h2 = conteudo.querySelector("h2");
+  if (h2) h2.textContent = `Funcionários (${listaUsuarios.length})`;
+
+  if (filtrados.length === 0) {
+    if (tabela) tabela.outerHTML = `<div class="vazio">Nenhum funcionário encontrado.</div>`;
+    return;
+  }
+  if (!tabela) { renderFuncionarios(filtro); return; }
+  tbody.innerHTML = filtrados.map(u => `
+    <tr>
+      <td>${u.nome}</td>
+      <td>${u.email}</td>
+      <td>${u.role}</td>
+      <td>${setorNome(u.setorId)}</td>
+      <td><span class="status-tag ${u.status}">${u.status}</span></td>
+      <td class="acoes">
+        <button class="secundario" data-editar="${u.id}">Editar</button>
+        ${usuarioAtual.role === "admin" && u.id !== usuarioAtual.id ? `<button class="perigo" data-excluir="${u.id}">Excluir</button>` : ""}
+      </td>
+    </tr>
+  `).join("");
+  conteudo.querySelectorAll("[data-editar]").forEach(b => {
+    b.onclick = () => abrirModalFuncionario(Number(b.dataset.editar));
+  });
+  conteudo.querySelectorAll("[data-excluir]").forEach(b => {
+    b.onclick = () => excluirFuncionario(Number(b.dataset.excluir));
+  });
+}
+
+async function criarSetorPrompt() {
+  const nome = prompt("Nome do novo setor:");
+  if (!nome || !nome.trim()) return;
+  try {
+    await api("/setores", { method: "POST", body: JSON.stringify({ nome: nome.trim() }) });
+    await renderFuncionarios();
+  } catch (e) {
+    alert("Erro ao criar setor: " + e.message);
+  }
+}
+
+function abrirModalFuncionario(id) {
+  editandoId = id;
+  const editando = id ? listaUsuarios.find(u => u.id === id) : null;
+  const souAdmin = usuarioAtual.role === "admin";
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>${editando ? "Editar funcionário" : "Novo funcionário"}</h3>
+      <label>Nome</label>
+      <input id="m-nome" value="${editando ? editando.nome.replace(/"/g,'&quot;') : ""}" />
+      <label>E-mail</label>
+      <input id="m-email" type="email" value="${editando ? editando.email : ""}" />
+      ${!editando ? `<label>Senha</label><input id="m-senha" type="password" />` : `
+        <label>Nova senha (opcional)</label><input id="m-senha" type="password" placeholder="deixe em branco para manter" />
+      `}
+      ${souAdmin ? `
+        <label>Papel</label>
+        <select id="m-role">
+          ${["admin","rh","gestor_setor","usuario"].map(r => `<option value="${r}" ${editando?.role === r ? "selected" : ""}>${r}</option>`).join("")}
+        </select>
+      ` : ""}
+      ${!souGestorSetor ? `
+        <label>Setor</label>
+        <select id="m-setor">
+          <option value="">— nenhum —</option>
+          ${listaSetores.map(s => `<option value="${s.id}" ${editando?.setorId === s.id ? "selected" : ""}>${s.nome}</option>`).join("")}
+        </select>
+      ` : ""}
+      ${editando ? `
+        <label>Status</label>
+        <select id="m-status">
+          <option value="ativo" ${editando.status === "ativo" ? "selected" : ""}>Ativo</option>
+          <option value="bloqueado" ${editando.status === "bloqueado" ? "selected" : ""}>Bloqueado</option>
+        </select>
+      ` : ""}
+      <div id="m-erro"></div>
+      <div class="rodape">
+        <button class="secundario" id="m-cancelar">Cancelar</button>
+        <button id="m-salvar">${editando ? "Salvar" : "Criar"}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById("m-cancelar").onclick = () => overlay.remove();
+  document.getElementById("m-salvar").onclick = () => salvarFuncionario(overlay, editando);
+}
+
+async function salvarFuncionario(overlay, editando) {
+  const btn = document.getElementById("m-salvar");
+  const erroEl = document.getElementById("m-erro");
+  btn.disabled = true;
+  erroEl.innerHTML = "";
+  try {
+    const nome = document.getElementById("m-nome").value.trim();
+    const email = document.getElementById("m-email").value.trim();
+    const senhaEl = document.getElementById("m-senha");
+    const senha = senhaEl ? senhaEl.value : "";
+    const roleEl = document.getElementById("m-role");
+    const setorEl = document.getElementById("m-setor");
+    const statusEl = document.getElementById("m-status");
+
+    const body = { nome, email };
+    if (senha) body.senha = senha;
+    if (roleEl) body.role = roleEl.value;
+    if (setorEl) body.setorId = setorEl.value ? Number(setorEl.value) : null;
+    if (statusEl) body.status = statusEl.value;
+
+    if (editando) {
+      await api(`/usuarios/${editando.id}`, { method: "PUT", body: JSON.stringify(body) });
+    } else {
+      if (!senha || senha.length < 6) throw new Error("Senha deve ter no mínimo 6 caracteres.");
+      await api("/usuarios", { method: "POST", body: JSON.stringify(body) });
+    }
+    overlay.remove();
+    await renderFuncionarios();
+  } catch (e) {
+    erroEl.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("m-salvar")) btn.disabled = false;
+  }
+}
+
+async function excluirFuncionario(id) {
+  const alvo = listaUsuarios.find(u => u.id === id);
+  if (!confirm(`Excluir ${alvo ? alvo.nome : "este funcionário"}? Essa ação não pode ser desfeita.`)) return;
+  try {
+    await api(`/usuarios/${id}`, { method: "DELETE" });
+    await renderFuncionarios();
+  } catch (e) {
+    alert("Erro ao excluir: " + e.message);
+  }
+}
+
+iniciar();
 </script>
 </body>
 </html>
