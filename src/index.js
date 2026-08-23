@@ -310,7 +310,7 @@ async function handleApi(req, env, url) {
     if (!["admin", "rh", "gestor_setor"].includes(usuario.role)) return erro("Sem permissao.", 403);
     const body = await req.json().catch(() => ({}));
     const registros = Array.isArray(body.registros) ? body.registros : [];
-    const origem = ["manual", "excel", "ocr", "ia"].includes(body.origem) ? body.origem : "manual";
+    const origem = ["manual", "excel", "ocr", "ia", "padrao"].includes(body.origem) ? body.origem : "manual";
     if (!registros.length) return erro("Nenhum registro para importar.");
     if (registros.length > 1000) return erro("Maximo de 1000 registros por importacao.");
 
@@ -343,6 +343,22 @@ async function handleApi(req, env, url) {
     }
 
     return json({ inseridos, falhas });
+  }
+
+  // DELETE /escalas?userId=&de=&ate= — remove lancamentos de origem 'padrao' num periodo (usado ao regerar a escala)
+  if (path === "/escalas" && method === "DELETE") {
+    if (!["admin", "rh", "gestor_setor"].includes(usuario.role)) return erro("Sem permissao.", 403);
+    const userId = Number(url.searchParams.get("userId"));
+    const de = url.searchParams.get("de");
+    const ate = url.searchParams.get("ate");
+    if (!userId || !de || !ate) return erro("Informe userId, de e ate.");
+    const alvo = await env.DB.prepare("SELECT id, setor_id FROM users WHERE id = ?").bind(userId).first();
+    if (!alvo) return erro("Funcionario nao encontrado.", 404);
+    if (usuario.role === "gestor_setor" && alvo.setor_id !== usuario.setor_id) return erro("Sem permissao.", 403);
+    const res = await env.DB.prepare(
+      "DELETE FROM escalas WHERE user_id = ? AND data >= ? AND data <= ? AND origem = 'padrao'"
+    ).bind(userId, de, ate).run();
+    return json({ removidos: res.meta.changes });
   }
 
   // GET /escalas?userId=&de=&ate= — lista escalas com filtros simples

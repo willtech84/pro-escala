@@ -221,6 +221,7 @@ async function renderShell() {
     <nav class="abas">
       <button class="aba ${telaAtual === "funcionarios" ? "ativa" : ""}" data-aba="funcionarios">Funcionários</button>
       <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Escala</button>
+      <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
   `;
@@ -231,6 +232,7 @@ async function renderShell() {
       b.onclick = () => { telaAtual = b.dataset.aba; renderShell(); };
     });
     if (telaAtual === "importar") await renderImportarEscala();
+    else if (telaAtual === "gerar") await renderGerarEscala();
     else await renderFuncionarios();
   } else {
     document.getElementById("conteudo").innerHTML = `
@@ -735,6 +737,252 @@ async function confirmarImportacao() {
   btn.disabled = false;
 
   await carregarDados();
+}
+
+/* ---------- Gerar Escala a partir do padrão ---------- */
+// Cada modelo de padrao tem uma logica de distribuicao diferente. Isso e' uma SUGESTAO --
+// o gestor revisa/ajusta linha a linha antes de confirmar, igual na importacao por imagem.
+function duracaoHoras(bloco) {
+  const [hi, mi] = bloco.inicio.split(":").map(Number);
+  const [hf, mf] = bloco.fim.split(":").map(Number);
+  let minutos = (hf * 60 + mf) - (hi * 60 + mi);
+  if (minutos <= 0) minutos += 24 * 60; // bloco cruza a meia-noite
+  return minutos / 60;
+}
+
+function todasDatasEntre(iniStr, fimStr) {
+  const datas = [];
+  let d = new Date(iniStr + "T12:00:00");
+  const fim = new Date(fimStr + "T12:00:00");
+  while (d <= fim) {
+    datas.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return datas;
+}
+
+function gerarLancamentos(tipoEscala, dataIni, dataFim, opcoes) {
+  const blocos = tipoEscala.blocos;
+  const dias = todasDatasEntre(dataIni, dataFim);
+  const resultado = [];
+
+  if (blocos.length === 6) {
+    // Modelo rotativo 4h (ex: 24h semanais): um bloco por dia, 1 folga a cada 7 dias
+    let idxBloco = opcoes.offsetBloco || 0;
+    dias.forEach((data, i) => {
+      if (i % 7 === (opcoes.diaFolgaIndex ?? 6)) return;
+      const bloco = blocos[idxBloco % blocos.length];
+      resultado.push({ data, horaInicio: bloco.inicio, horaFim: bloco.fim, tipo: "turno" });
+      idxBloco++;
+    });
+  } else if (blocos.length === 1 && duracaoHoras(blocos[0]) >= 10) {
+    // Modelo 12x36
+    let trabalhaHoje = !opcoes.comecaFolgando;
+    dias.forEach(data => {
+      if (trabalhaHoje) resultado.push({ data, horaInicio: blocos[0].inicio, horaFim: blocos[0].fim, tipo: "12x36" });
+      trabalhaHoje = !trabalhaHoje;
+    });
+  } else if (blocos.length === 2 && duracaoHoras(blocos[0]) >= 5) {
+    // Modelo 30h (6h em dias uteis + 12h alternado no fim de semana)
+    dias.forEach(data => {
+      const dt = new Date(data + "T12:00:00");
+      const dow = dt.getDay(); // 0=domingo, 6=sabado
+      const semanaDoMes = Math.ceil(dt.getDate() / 7);
+      const trabalhaSabado = opcoes.iniciaSabado ? (semanaDoMes % 2 === 1) : (semanaDoMes % 2 === 0);
+      if (dow === 6) { if (trabalhaSabado) resultado.push({ data, horaInicio: "07:00", horaFim: "19:00", tipo: "12h fim de semana" }); }
+      else if (dow === 0) { if (!trabalhaSabado) resultado.push({ data, horaInicio: "07:00", horaFim: "19:00", tipo: "12h fim de semana" }); }
+      else { const bloco = blocos[opcoes.blocoSemanaIndex || 0]; resultado.push({ data, horaInicio: bloco.inicio, horaFim: bloco.fim, tipo: "turno" }); }
+    });
+  } else if (blocos.length === 2) {
+    // Modelo 44h (2 blocos de 4h com intervalo, dias uteis)
+    dias.forEach(data => {
+      const dow = new Date(data + "T12:00:00").getDay();
+      if (dow === 0 || dow === 6) return;
+      blocos.forEach(b => resultado.push({ data, horaInicio: b.inicio, horaFim: b.fim, tipo: "turno" }));
+    });
+  }
+
+  return resultado;
+}
+
+let registrosGeracao = [];
+let funcionarioGeracaoId = "";
+
+async function renderGerarEscala() {
+  const conteudo = document.getElementById("conteudo");
+  if (!listaUsuarios.length) {
+    try { await carregarDados(); } catch (e) {
+      conteudo.innerHTML = `<div class="msg erro">Erro ao carregar dados: ${e.message}</div>`;
+      return;
+    }
+  }
+  const comPadrao = listaUsuarios.filter(u => u.tipoEscalaId);
+  const hoje = new Date();
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Gerar Escala a partir do Padrão</h2></div>
+    <div class="aviso-modo">
+      Escolha o funcionário e o mês — o sistema sugere os lançamentos com base no padrão de escala dele.
+      Revise e ajuste antes de confirmar; a lógica de rotação é uma sugestão, não uma regra fixa.
+    </div>
+    ${comPadrao.length === 0 ? `<div class="vazio">Nenhum funcionário tem padrão de escala definido ainda. Defina em "Funcionários" → Editar.</div>` : `
+    <label>Funcionário</label>
+    <select id="g-funcionario" style="max-width:320px">
+      <option value="">selecione</option>
+      ${comPadrao.map(u => `<option value="${u.id}">${u.nome} — ${listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || ""}</option>`).join("")}
+    </select>
+    <label>Mês</label>
+    <input type="month" id="g-mes" value="${mesAtual}" style="max-width:180px" />
+    <div id="g-opcoes"></div>
+    <div style="margin-top:16px;"><button id="g-gerar">Gerar sugestão</button></div>
+    <div id="g-feedback" style="margin-top:14px;"></div>
+    <div id="g-revisao"></div>
+    `}
+  `;
+  if (comPadrao.length === 0) return;
+
+  const selFunc = document.getElementById("g-funcionario");
+  selFunc.onchange = () => renderOpcoesGeracao(Number(selFunc.value));
+  document.getElementById("g-gerar").onclick = gerarSugestao;
+}
+
+function renderOpcoesGeracao(usuarioId) {
+  const area = document.getElementById("g-opcoes");
+  const u = listaUsuarios.find(x => x.id === usuarioId);
+  const tipo = u ? listaTiposEscala.find(t => t.id === u.tipoEscalaId) : null;
+  if (!tipo) { area.innerHTML = ""; return; }
+
+  if (tipo.blocos.length === 6) {
+    area.innerHTML = `<label>Dia da semana de folga fixa (0=domingo ... 6=sábado)</label>
+      <select id="g-opt-folga">${[0,1,2,3,4,5,6].map(d => `<option value="${d}" ${d===6?"selected":""}>${["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][d]}</option>`).join("")}</select>`;
+  } else if (tipo.blocos.length === 1 && duracaoHoras(tipo.blocos[0]) >= 10) {
+    area.innerHTML = `<label style="display:flex; align-items:center; gap:8px; margin-top:14px;">
+      <input type="checkbox" id="g-opt-folgando" style="width:auto" /> Começar o mês folgando (em vez de trabalhando)
+    </label>`;
+  } else if (tipo.blocos.length === 2 && duracaoHoras(tipo.blocos[0]) >= 5) {
+    area.innerHTML = `<label style="display:flex; align-items:center; gap:8px; margin-top:14px;">
+      <input type="checkbox" id="g-opt-sabado" style="width:auto" /> Este mês o 12h alternado cai no sábado (em semana ímpar)
+    </label>`;
+  } else {
+    area.innerHTML = "";
+  }
+}
+
+async function gerarSugestao() {
+  const fb = document.getElementById("g-feedback");
+  const usuarioId = Number(document.getElementById("g-funcionario").value);
+  const mes = document.getElementById("g-mes").value; // AAAA-MM
+  if (!usuarioId || !mes) { fb.innerHTML = `<div class="msg erro">Selecione o funcionário e o mês.</div>`; return; }
+
+  const u = listaUsuarios.find(x => x.id === usuarioId);
+  const tipo = listaTiposEscala.find(t => t.id === u.tipoEscalaId);
+  const [ano, mesNum] = mes.split("-").map(Number);
+  const dataIni = `${mes}-01`;
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+  const dataFim = `${mes}-${String(ultimoDia).padStart(2, "0")}`;
+
+  const opcoes = {
+    diaFolgaIndex: document.getElementById("g-opt-folga") ? Number(document.getElementById("g-opt-folga").value) : undefined,
+    comecaFolgando: document.getElementById("g-opt-folgando") ? document.getElementById("g-opt-folgando").checked : false,
+    iniciaSabado: document.getElementById("g-opt-sabado") ? document.getElementById("g-opt-sabado").checked : false,
+  };
+
+  fb.innerHTML = `<div class="vazio">Verificando lançamentos existentes...</div>`;
+  let existentes = [];
+  try {
+    const r = await api(`/escalas?userId=${usuarioId}&de=${dataIni}&ate=${dataFim}`);
+    existentes = r.escalas;
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">Erro ao verificar lançamentos: ${e.message}</div>`;
+    return;
+  }
+
+  if (existentes.length > 0) {
+    fb.innerHTML = `
+      <div class="msg erro">${existentes.length} lançamento(s) já existem para ${u.nome} nesse mês.</div>
+      <div style="margin-top:8px; display:flex; gap:10px;">
+        <button class="secundario" id="g-cancelar-sub">Cancelar</button>
+        <button class="perigo" id="g-substituir">Substituir os gerados por padrão (mantém os manuais/excel/ocr)</button>
+      </div>
+    `;
+    document.getElementById("g-cancelar-sub").onclick = () => { fb.innerHTML = ""; };
+    document.getElementById("g-substituir").onclick = async () => {
+      try {
+        await api(`/escalas?userId=${usuarioId}&de=${dataIni}&ate=${dataFim}`, { method: "DELETE" });
+        montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes);
+      } catch (e) {
+        fb.innerHTML = `<div class="msg erro">Erro ao substituir: ${e.message}</div>`;
+      }
+    };
+    return;
+  }
+
+  fb.innerHTML = "";
+  montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes);
+}
+
+function montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes) {
+  funcionarioGeracaoId = usuarioId;
+  registrosGeracao = gerarLancamentos(tipo, dataIni, dataFim, opcoes);
+  renderTabelaGeracao();
+}
+
+function renderTabelaGeracao() {
+  const area = document.getElementById("g-revisao");
+  if (!registrosGeracao.length) {
+    area.innerHTML = `<div class="vazio">Nenhum lançamento gerado — ajuste as opções e tente de novo.</div>`;
+    return;
+  }
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:24px;">
+      <h2 style="font-size:16px;">Sugestão gerada (${registrosGeracao.length} lançamentos)</h2>
+    </div>
+    <table class="tabela-revisao">
+      <thead><tr><th>Data</th><th>Início</th><th>Fim</th><th>Tipo</th><th></th></tr></thead>
+      <tbody id="g-tbody"></tbody>
+    </table>
+    <div id="g-feedback-confirmar" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="g-confirmar">Confirmar e salvar escala do mês</button></div>
+  `;
+  const tbody = document.getElementById("g-tbody");
+  registrosGeracao.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input data-campo="data" data-i="${i}" value="${r.data}" style="width:110px" /></td>
+      <td><input data-campo="horaInicio" data-i="${i}" value="${r.horaInicio}" style="width:70px" /></td>
+      <td><input data-campo="horaFim" data-i="${i}" value="${r.horaFim}" style="width:70px" /></td>
+      <td><input data-campo="tipo" data-i="${i}" value="${r.tipo}" style="width:120px" /></td>
+      <td><button class="perigo" data-remover="${i}">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll("[data-campo]").forEach(el => {
+    el.onchange = () => { registrosGeracao[Number(el.dataset.i)][el.dataset.campo] = el.value; };
+  });
+  tbody.querySelectorAll("[data-remover]").forEach(b => {
+    b.onclick = () => { registrosGeracao.splice(Number(b.dataset.remover), 1); renderTabelaGeracao(); };
+  });
+  document.getElementById("g-confirmar").onclick = confirmarGeracao;
+}
+
+async function confirmarGeracao() {
+  const btn = document.getElementById("g-confirmar");
+  const fb = document.getElementById("g-feedback-confirmar");
+  btn.disabled = true;
+  try {
+    const registros = registrosGeracao.map(r => ({ usuarioId: funcionarioGeracaoId, data: r.data, horaInicio: r.horaInicio, horaFim: r.horaFim, tipo: r.tipo }));
+    const resultado = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "padrao" }) });
+    let html = `<div class="msg ok">${resultado.inseridos} lançamento(s) salvos.</div>`;
+    if (resultado.falhas && resultado.falhas.length) {
+      html += `<div class="msg erro">${resultado.falhas.length} falha(s): ${resultado.falhas.map(f => `linha ${f.linha} (${f.motivo})`).join(", ")}</div>`;
+    }
+    fb.innerHTML = html;
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("g-confirmar")) btn.disabled = false;
+  }
 }
 
 iniciar();
