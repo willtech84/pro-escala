@@ -117,6 +117,7 @@ let modo = "login"; // login | setup
 let usuarioAtual = null;
 let listaUsuarios = [];
 let listaSetores = [];
+let listaTiposEscala = [];
 let editandoId = null;
 
 function getToken() { return localStorage.getItem("pe_token"); }
@@ -240,9 +241,10 @@ async function renderShell() {
 
 /* ---------- Tela de Funcionários ---------- */
 async function carregarDados() {
-  const [u, s] = await Promise.all([api("/usuarios"), api("/setores")]);
+  const [u, s, t] = await Promise.all([api("/usuarios"), api("/setores"), api("/tipos-escala")]);
   listaUsuarios = u.usuarios;
   listaSetores = s.setores;
+  listaTiposEscala = t.tiposEscala;
 }
 
 async function renderFuncionarios(filtro = "") {
@@ -262,6 +264,7 @@ async function renderFuncionarios(filtro = "") {
   );
 
   const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
+  const escalaNome = (id) => listaTiposEscala.find(t => t.id === id)?.nome || "—";
 
   conteudo.innerHTML = `
     <div class="cabecalho-lista">
@@ -281,7 +284,7 @@ async function renderFuncionarios(filtro = "") {
     <div id="feedback-setor"></div>
     ${filtrados.length === 0 ? `<div class="vazio">Nenhum funcionário encontrado.</div>` : `
     <table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setor</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setor</th><th>Escala</th><th>Status</th><th></th></tr></thead>
       <tbody>
         ${filtrados.map(u => `
           <tr>
@@ -289,6 +292,7 @@ async function renderFuncionarios(filtro = "") {
             <td>${u.email}</td>
             <td>${u.role}</td>
             <td>${setorNome(u.setorId)}</td>
+            <td>${escalaNome(u.tipoEscalaId)}</td>
             <td><span class="status-tag ${u.status}">${u.status}</span></td>
             <td class="acoes">
               <button class="secundario" data-editar="${u.id}">Editar</button>
@@ -321,6 +325,7 @@ function renderFuncionariosLocal(filtro) {
     !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
   );
   const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
+  const escalaNome = (id) => listaTiposEscala.find(t => t.id === id)?.nome || "—";
   const tbody = conteudo.querySelector("tbody");
   const tabela = conteudo.querySelector("table");
   const h2 = conteudo.querySelector("h2");
@@ -337,6 +342,7 @@ function renderFuncionariosLocal(filtro) {
       <td>${u.email}</td>
       <td>${u.role}</td>
       <td>${setorNome(u.setorId)}</td>
+      <td>${escalaNome(u.tipoEscalaId)}</td>
       <td><span class="status-tag ${u.status}">${u.status}</span></td>
       <td class="acoes">
         <button class="secundario" data-editar="${u.id}">Editar</button>
@@ -402,6 +408,11 @@ function abrirModalFuncionario(id) {
           ${listaSetores.map(s => `<option value="${s.id}" ${editando?.setorId === s.id ? "selected" : ""}>${s.nome}</option>`).join("")}
         </select>
       ` : ""}
+      <label>Padrão de escala</label>
+      <select id="m-tipo-escala">
+        <option value="">— não definido —</option>
+        ${listaTiposEscala.map(t => `<option value="${t.id}" ${editando?.tipoEscalaId === t.id ? "selected" : ""}>${t.nome}</option>`).join("")}
+      </select>
       ${editando ? `
         <label>Status</label>
         <select id="m-status">
@@ -434,12 +445,14 @@ async function salvarFuncionario(overlay, editando) {
     const senha = senhaEl ? senhaEl.value : "";
     const roleEl = document.getElementById("m-role");
     const setorEl = document.getElementById("m-setor");
+    const tipoEscalaEl = document.getElementById("m-tipo-escala");
     const statusEl = document.getElementById("m-status");
 
     const body = { nome, email };
     if (senha) body.senha = senha;
     if (roleEl) body.role = roleEl.value;
     if (setorEl) body.setorId = setorEl.value ? Number(setorEl.value) : null;
+    if (tipoEscalaEl) body.tipoEscalaId = tipoEscalaEl.value ? Number(tipoEscalaEl.value) : null;
     if (statusEl) body.status = statusEl.value;
 
     if (editando) {
@@ -495,31 +508,20 @@ async function extrairComIA() {
 
 // Parser ingenuo: tenta achar data (dd/mm/aaaa ou aaaa-mm-dd) e horarios (HH:MM) em cada linha.
 // O resto da linha vira o "nome detectado", que o usuario ajusta manualmente na tabela de revisao.
-function linhasParaRegistros(texto) {
-  const REGEX_DATA_BR = /(\d{2})\/(\d{2})\/(\d{4})/;
-  const REGEX_DATA_ISO = /(\d{4})-(\d{2})-(\d{2})/;
-  const REGEX_HORA = /(\d{1,2}):(\d{2})/g;
-
-  return texto.split("\n").map(l => l.trim()).filter(Boolean).map(linha => {
-    let data = "";
-    const mIso = linha.match(REGEX_DATA_ISO);
-    const mBr = linha.match(REGEX_DATA_BR);
-    if (mIso) data = mIso[0];
-    else if (mBr) data = `${mBr[3]}-${mBr[2]}-${mBr[1]}`;
-
-    const horas = [...linha.matchAll(REGEX_HORA)].map(m => `${m[1].padStart(2,"0")}:${m[2]}`);
-    const horaInicio = horas[0] || "";
-    const horaFim = horas[1] || "";
-
-    let nomeDetectado = linha
-      .replace(REGEX_DATA_BR, "").replace(REGEX_DATA_ISO, "")
-      .replace(/\d{1,2}:\d{2}/g, "")
-      .replace(/[-–—|;,]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return { nomeDetectado, usuarioId: "", data, horaInicio, horaFim, tipo: "", observacao: "" };
-  });
+// Extrai só os nomes de cada linha do texto OCR (ignora linhas que parecem
+// cabeçalho/numeros/codigo de turno, mantendo o que parece nome de pessoa).
+function linhasParaNomes(texto) {
+  return texto
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(l => l.replace(/[|\[\]]+/g, " ").replace(/\s+/g, " ").trim())
+    .filter(l => {
+      if (l.length < 2) return false;
+      const letras = (l.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+      const digitos = (l.match(/[0-9]/g) || []).length;
+      return letras > digitos; // linha "de nome" tem mais letra que digito; descarta linhas de grade/horario
+    });
 }
 
 function encontrarUsuarioPorNome(nomeDetectado) {
@@ -527,6 +529,18 @@ function encontrarUsuarioPorNome(nomeDetectado) {
   const termo = nomeDetectado.toLowerCase();
   const achado = listaUsuarios.find(u => termo.includes(u.nome.toLowerCase()) || u.nome.toLowerCase().includes(termo));
   return achado ? achado.id : "";
+}
+
+function slug(texto) {
+  return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "func";
+}
+
+function gerarEmailTemp(nome) {
+  const aleatorio = Math.random().toString(36).slice(2, 7);
+  return `${slug(nome)}.${aleatorio}@pendente.pro-escala`;
+}
+function gerarSenhaTemp() {
+  return Math.random().toString(36).slice(2, 10) + "Aa1!";
 }
 
 async function renderImportarEscala() {
@@ -541,8 +555,9 @@ async function renderImportarEscala() {
   conteudo.innerHTML = `
     <div class="cabecalho-lista"><h2>Importar Escala por Imagem</h2></div>
     <div class="aviso-modo">
-      Modo atual: <strong>${PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].rotulo}</strong> — a leitura é feita no seu navegador e pode errar nomes, datas ou horários.
-      Revise a tabela abaixo com atenção antes de importar. Quando o modo com IA for ativado, a leitura fica bem mais precisa automaticamente.
+      Modo atual: <strong>${PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].rotulo}</strong> — a leitura fica só na coluna de nomes
+      (horário de grade em foto costuma vir embaralhado). Depois de reconhecer os nomes, você vincula cada um a um
+      funcionário e define o padrão de escala dele. Os horários da semana são gerados a partir desse padrão.
     </div>
     <div class="dropzone" id="dropzone">
       <div id="dropzone-texto">📷 Clique para escolher uma foto ou print da escala (JPG, PNG)</div>
@@ -583,33 +598,47 @@ async function processarImagem(file) {
 function renderTextoBruto() {
   const area = document.getElementById("area-texto-bruto");
   area.innerHTML = `
-    <label>Texto lido da imagem (edite antes de gerar a tabela, se precisar)</label>
+    <label>Texto lido da imagem (edite antes de extrair os nomes, se precisar — apague linhas de grade/números)</label>
     <textarea class="texto-ocr" id="texto-ocr">${textoOcrBruto}</textarea>
-    <div style="margin-top:10px;"><button id="btn-gerar-linhas">Gerar tabela para revisão</button></div>
+    <div style="margin-top:10px;"><button id="btn-gerar-linhas">Extrair nomes</button></div>
   `;
   document.getElementById("btn-gerar-linhas").onclick = () => {
     const texto = document.getElementById("texto-ocr").value;
-    registrosRevisao = linhasParaRegistros(texto).map(r => ({ ...r, usuarioId: encontrarUsuarioPorNome(r.nomeDetectado) }));
-    if (!registrosRevisao.length) registrosRevisao = [{ nomeDetectado: "", usuarioId: "", data: "", horaInicio: "", horaFim: "", tipo: "", observacao: "" }];
+    const nomes = linhasParaNomes(texto);
+    registrosRevisao = nomes.map(n => ({
+      nomeDetectado: n,
+      usuarioId: encontrarUsuarioPorNome(n),
+      setorId: usuarioAtual.role === "gestor_setor" ? usuarioAtual.setorId : (listaSetores[0]?.id || ""),
+      tipoEscalaId: "",
+    }));
+    if (!registrosRevisao.length) registrosRevisao = [{ nomeDetectado: "", usuarioId: "", setorId: "", tipoEscalaId: "" }];
     renderTabelaRevisao();
   };
 }
 
 function renderTabelaRevisao() {
   const area = document.getElementById("area-revisao");
-  const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  const opcoesUsuarios = (r) => {
+    const jaEscolhidos = registrosRevisao.filter(x => x !== r).map(x => x.usuarioId).filter(Boolean);
+    return listaUsuarios
+      .filter(u => !jaEscolhidos.includes(u.id))
+      .map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+  };
+  const opcoesSetores = listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
+  const opcoesTiposEscala = listaTiposEscala.map(t => `<option value="${t.id}">${t.nome}</option>`).join("");
 
   area.innerHTML = `
     <div class="cabecalho-lista" style="margin-top:24px;">
-      <h2 style="font-size:16px;">Revisar antes de importar (${registrosRevisao.length} linhas)</h2>
+      <h2 style="font-size:16px;">Revisar antes de importar (${registrosRevisao.length} nomes)</h2>
       <button class="secundario" id="btn-add-linha">+ Linha</button>
     </div>
     <table class="tabela-revisao">
-      <thead><tr><th>Detectado</th><th>Funcionário</th><th>Data</th><th>Início</th><th>Fim</th><th>Tipo</th><th></th></tr></thead>
+      <thead><tr><th>Detectado</th><th>Vincular a</th><th>Setor (se novo)</th><th>Padrão de escala</th><th></th></tr></thead>
       <tbody id="tbody-revisao"></tbody>
     </table>
     <div id="feedback-import" style="margin-top:14px;"></div>
-    <div style="margin-top:14px;"><button id="btn-importar">Importar registros válidos</button></div>
+    <div style="margin-top:14px;"><button id="btn-importar">Confirmar funcionários</button></div>
   `;
 
   const tbody = document.getElementById("tbody-revisao");
@@ -617,26 +646,43 @@ function renderTabelaRevisao() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${r.nomeDetectado || "—"}</td>
-      <td><select data-campo="usuarioId" data-i="${i}"><option value="">selecione</option>${opcoesUsuarios}</select></td>
-      <td><input data-campo="data" data-i="${i}" placeholder="AAAA-MM-DD" value="${r.data}" style="width:110px" /></td>
-      <td><input data-campo="horaInicio" data-i="${i}" placeholder="HH:MM" value="${r.horaInicio}" style="width:70px" /></td>
-      <td><input data-campo="horaFim" data-i="${i}" placeholder="HH:MM" value="${r.horaFim}" style="width:70px" /></td>
-      <td><input data-campo="tipo" data-i="${i}" placeholder="turno/tipo" value="${r.tipo}" style="width:100px" /></td>
+      <td>
+        <select data-campo="usuarioId" data-i="${i}">
+          <option value="">— criar novo funcionário —</option>
+          ${opcoesUsuarios(r)}
+        </select>
+      </td>
+      <td>
+        <select data-campo="setorId" data-i="${i}" ${souGestorSetor ? "disabled" : ""} style="${r.usuarioId ? "visibility:hidden" : ""}">
+          <option value="">selecione</option>
+          ${opcoesSetores}
+        </select>
+      </td>
+      <td>
+        <select data-campo="tipoEscalaId" data-i="${i}">
+          <option value="">— não definido —</option>
+          ${opcoesTiposEscala}
+        </select>
+      </td>
       <td><button class="perigo" data-remover="${i}">×</button></td>
     `;
     tbody.appendChild(tr);
-    const sel = tr.querySelector(`select[data-campo="usuarioId"]`);
-    sel.value = r.usuarioId || "";
+    tr.querySelector(`select[data-campo="usuarioId"]`).value = r.usuarioId || "";
+    tr.querySelector(`select[data-campo="setorId"]`).value = r.setorId || "";
+    tr.querySelector(`select[data-campo="tipoEscalaId"]`).value = r.tipoEscalaId || "";
   });
 
   tbody.querySelectorAll("[data-campo]").forEach(el => {
-    el.onchange = () => { registrosRevisao[Number(el.dataset.i)][el.dataset.campo] = el.value; };
+    el.onchange = () => {
+      registrosRevisao[Number(el.dataset.i)][el.dataset.campo] = el.value;
+      if (el.dataset.campo === "usuarioId") renderTabelaRevisao(); // re-render p/ atualizar opcoes disponiveis e visibilidade do setor
+    };
   });
   tbody.querySelectorAll("[data-remover]").forEach(b => {
     b.onclick = () => { registrosRevisao.splice(Number(b.dataset.remover), 1); renderTabelaRevisao(); };
   });
   document.getElementById("btn-add-linha").onclick = () => {
-    registrosRevisao.push({ nomeDetectado: "", usuarioId: "", data: "", horaInicio: "", horaFim: "", tipo: "", observacao: "" });
+    registrosRevisao.push({ nomeDetectado: "", usuarioId: "", setorId: souGestorSetor ? usuarioAtual.setorId : "", tipoEscalaId: "" });
     renderTabelaRevisao();
   };
   document.getElementById("btn-importar").onclick = confirmarImportacao;
@@ -647,23 +693,48 @@ async function confirmarImportacao() {
   const fb = document.getElementById("feedback-import");
   btn.disabled = true;
   fb.innerHTML = "";
-  try {
-    const registros = registrosRevisao
-      .filter(r => r.usuarioId && r.data && r.horaInicio && r.horaFim)
-      .map(r => ({ usuarioId: Number(r.usuarioId), data: r.data, horaInicio: r.horaInicio, horaFim: r.horaFim, tipo: r.tipo, observacao: r.observacao }));
-    if (!registros.length) throw new Error("Preencha funcionário, data e horários de pelo menos uma linha.");
 
-    const resultado = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "ocr" }) });
-    let html = `<div class="msg ok">${resultado.inseridos} registro(s) importado(s) com sucesso.</div>`;
-    if (resultado.falhas && resultado.falhas.length) {
-      html += `<div class="msg erro">${resultado.falhas.length} falha(s): ${resultado.falhas.map(f => `linha ${f.linha} (${f.motivo})`).join(", ")}</div>`;
-    }
-    fb.innerHTML = html;
-  } catch (e) {
-    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
-  } finally {
-    if (document.getElementById("btn-importar")) btn.disabled = false;
+  const validos = registrosRevisao.filter(r => r.nomeDetectado && (r.usuarioId || r.setorId));
+  if (!validos.length) {
+    fb.innerHTML = `<div class="msg erro">Preencha ao menos um nome com funcionário ou setor definido.</div>`;
+    btn.disabled = false;
+    return;
   }
+
+  let criados = 0, atualizados = 0;
+  const falhas = [];
+
+  for (const r of validos) {
+    try {
+      if (r.usuarioId) {
+        if (r.tipoEscalaId) {
+          await api(`/usuarios/${r.usuarioId}`, { method: "PUT", body: JSON.stringify({ tipoEscalaId: Number(r.tipoEscalaId) }) });
+          atualizados++;
+        }
+      } else {
+        await api("/usuarios", { method: "POST", body: JSON.stringify({
+          nome: r.nomeDetectado,
+          email: gerarEmailTemp(r.nomeDetectado),
+          senha: gerarSenhaTemp(),
+          role: "usuario",
+          setorId: Number(r.setorId),
+          tipoEscalaId: r.tipoEscalaId ? Number(r.tipoEscalaId) : null,
+        }) });
+        criados++;
+      }
+    } catch (e) {
+      falhas.push(`${r.nomeDetectado}: ${e.message}`);
+    }
+  }
+
+  let html = "";
+  if (criados) html += `<div class="msg ok">${criados} funcionário(s) novo(s) criado(s).</div>`;
+  if (atualizados) html += `<div class="msg ok">${atualizados} padrão(ões) de escala atualizado(s).</div>`;
+  if (falhas.length) html += `<div class="msg erro">${falhas.length} falha(s): ${falhas.join(", ")}</div>`;
+  fb.innerHTML = html;
+  btn.disabled = false;
+
+  await carregarDados();
 }
 
 iniciar();

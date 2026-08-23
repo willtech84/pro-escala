@@ -54,6 +54,7 @@ function semSenha(u) {
     email: u.email,
     role: u.role,
     setorId: u.setor_id,
+    tipoEscalaId: u.tipo_escala_id,
     status: u.status,
     criadoEm: u.criado_em,
   };
@@ -144,7 +145,7 @@ async function handleApi(req, env, url) {
 
   // GET /usuarios — admin ve todos; rh ve todos; gestor_setor ve so do proprio setor
   if (path === "/usuarios" && method === "GET") {
-    let query = "SELECT id, nome, email, role, setor_id, status, criado_em FROM users";
+    let query = "SELECT id, nome, email, role, setor_id, tipo_escala_id, status, criado_em FROM users";
     let stmt;
     if (usuario.role === "gestor_setor") {
       stmt = env.DB.prepare(query + " WHERE setor_id = ? ORDER BY nome").bind(usuario.setor_id);
@@ -210,6 +211,7 @@ async function handleApi(req, env, url) {
     if (typeof body.nome === "string" && body.nome.trim()) { campos.push("nome = ?"); valores.push(body.nome.trim()); }
     if (typeof body.email === "string" && body.email.trim()) { campos.push("email = ?"); valores.push(body.email.trim().toLowerCase()); }
     if (typeof body.status === "string" && ["ativo", "bloqueado"].includes(body.status)) { campos.push("status = ?"); valores.push(body.status); }
+    if (body.tipoEscalaId !== undefined) { campos.push("tipo_escala_id = ?"); valores.push(body.tipoEscalaId || null); }
     if (usuario.role === "admin") {
       if (typeof body.role === "string" && ROLES.includes(body.role)) { campos.push("role = ?"); valores.push(body.role); }
       if (body.setorId !== undefined) { campos.push("setor_id = ?"); valores.push(body.setorId); }
@@ -258,6 +260,48 @@ async function handleApi(req, env, url) {
         "INSERT INTO config_app (chave, valor, atualizado_por, atualizado_em) VALUES (?,?,?,?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_por = excluded.atualizado_por, atualizado_em = excluded.atualizado_em"
       ).bind(chave, String(valor), usuario.id, agora).run();
     }
+    return json({ ok: true });
+  }
+
+  // GET /tipos-escala — qualquer usuario logado pode ver os padroes disponiveis
+  if (path === "/tipos-escala" && method === "GET") {
+    const { results } = await env.DB.prepare("SELECT * FROM tipos_escala WHERE ativo = 1 ORDER BY carga_horaria_semanal, nome").all();
+    return json({ tiposEscala: results.map(t => ({ ...t, blocos: JSON.parse(t.blocos) })) });
+  }
+
+  // POST /tipos-escala — so admin cria padrao novo
+  if (path === "/tipos-escala" && method === "POST") {
+    if (usuario.role !== "admin") return erro("Apenas admin pode criar padrões de escala.", 403);
+    const body = await req.json().catch(() => ({}));
+    const nome = (body.nome || "").trim();
+    const carga = Number(body.cargaHorariaSemanal);
+    const blocos = Array.isArray(body.blocos) ? body.blocos : null;
+    if (!nome || !carga || !blocos || !blocos.length) return erro("Informe nome, carga horária semanal e ao menos um bloco.");
+    for (const b of blocos) {
+      if (!/^\d{2}:\d{2}$/.test(b.inicio) || !/^\d{2}:\d{2}$/.test(b.fim)) return erro("Cada bloco precisa de inicio e fim no formato HH:MM.");
+    }
+    const res = await env.DB.prepare(
+      "INSERT INTO tipos_escala (nome, carga_horaria_semanal, blocos, regras) VALUES (?,?,?,?)"
+    ).bind(nome, carga, JSON.stringify(blocos), body.regras || null).run();
+    return json({ id: res.meta.last_row_id });
+  }
+
+  // PUT /tipos-escala/:id — so admin edita (ou desativa, para nao quebrar quem ja usa)
+  const mTipoEscala = path.match(/^\/tipos-escala\/(\d+)$/);
+  if (mTipoEscala && method === "PUT") {
+    if (usuario.role !== "admin") return erro("Apenas admin pode editar padrões de escala.", 403);
+    const id = Number(mTipoEscala[1]);
+    const body = await req.json().catch(() => ({}));
+    const campos = [];
+    const valores = [];
+    if (typeof body.nome === "string" && body.nome.trim()) { campos.push("nome = ?"); valores.push(body.nome.trim()); }
+    if (body.cargaHorariaSemanal !== undefined) { campos.push("carga_horaria_semanal = ?"); valores.push(Number(body.cargaHorariaSemanal)); }
+    if (Array.isArray(body.blocos)) { campos.push("blocos = ?"); valores.push(JSON.stringify(body.blocos)); }
+    if (typeof body.regras === "string") { campos.push("regras = ?"); valores.push(body.regras); }
+    if (typeof body.ativo === "boolean") { campos.push("ativo = ?"); valores.push(body.ativo ? 1 : 0); }
+    if (!campos.length) return erro("Nada para atualizar.");
+    valores.push(id);
+    await env.DB.prepare(`UPDATE tipos_escala SET ${campos.join(", ")} WHERE id = ?`).bind(...valores).run();
     return json({ ok: true });
   }
 
