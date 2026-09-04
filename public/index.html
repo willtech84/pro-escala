@@ -83,6 +83,15 @@
     background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px;
     font-size: 12.5px; color: #94a3b8; margin-bottom: 18px;
   }
+  .grade-mapeamento { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin: 14px 0; }
+  .col-mapeamento { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; }
+  .col-mapeamento .amostra { font-size: 11px; color: #64748b; margin-bottom: 6px; word-break: break-word; }
+  .col-mapeamento select { width: 100%; }
+  .sugestao-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 13px;
+  }
+  .sugestao-card button { padding: 6px 12px; font-size: 12.5px; }
 
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #293548; }
@@ -111,6 +120,7 @@
 <div id="app"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const API = "/api";
 let modo = "login"; // login | setup
@@ -220,7 +230,8 @@ async function renderShell() {
     ${podeGerenciarFuncionarios ? `
     <nav class="abas">
       <button class="aba ${telaAtual === "funcionarios" ? "ativa" : ""}" data-aba="funcionarios">Funcionários</button>
-      <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Escala</button>
+      <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Imagem</button>
+      <button class="aba ${telaAtual === "excel" ? "ativa" : ""}" data-aba="excel">Importar Excel</button>
       <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
@@ -232,6 +243,7 @@ async function renderShell() {
       b.onclick = () => { telaAtual = b.dataset.aba; renderShell(); };
     });
     if (telaAtual === "importar") await renderImportarEscala();
+    else if (telaAtual === "excel") await renderImportarExcel();
     else if (telaAtual === "gerar") await renderGerarEscala();
     else await renderFuncionarios();
   } else {
@@ -983,6 +995,363 @@ async function confirmarGeracao() {
   } finally {
     if (document.getElementById("g-confirmar")) btn.disabled = false;
   }
+}
+
+/* ---------- Importar Escala (Excel) ---------- */
+const DICIONARIO_COLUNAS = {
+  nome: ["nome", "funcionario", "colaborador", "servidor", "profissional", "empregado"],
+  data: ["data", "dia", "date"],
+  horaInicio: ["inicio", "entrada", "hora inicio", "hora de inicio", "ini", "start", "de"],
+  horaFim: ["fim", "saida", "termino", "final", "hora fim", "hora de saida", "ate", "end"],
+  tipo: ["tipo", "turno", "observacao", "obs", "plantao"],
+};
+
+function normalizarTexto(s) {
+  return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+function serialExcelParaDataISO(serial) {
+  const utcDias = Math.floor(serial - 25569);
+  const data = new Date(utcDias * 86400 * 1000);
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}-${String(data.getUTCDate()).padStart(2, "0")}`;
+}
+function serialExcelParaHoraHHMM(serial) {
+  const fracionario = serial - Math.floor(serial);
+  const totalMin = Math.round(fracionario * 24 * 60);
+  return `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+}
+
+function parseCelulaData(valor) {
+  if (valor === "" || valor === null || valor === undefined) return "";
+  if (typeof valor === "number") return serialExcelParaDataISO(valor);
+  const s = String(valor).trim();
+  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  const br = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2].padStart(2, "0")}-${br[1].padStart(2, "0")}`;
+  return "";
+}
+function parseCelulaHora(valor) {
+  if (valor === "" || valor === null || valor === undefined) return "";
+  if (typeof valor === "number") return serialExcelParaHoraHHMM(valor);
+  const s = String(valor).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return `${m[1].padStart(2, "0")}:${m[2]}`;
+  return "";
+}
+
+function detectarCabecalho(linhas) {
+  let melhorLinha = 0, melhorPontuacao = -1;
+  for (let i = 0; i < Math.min(linhas.length, 10); i++) {
+    const celulas = linhas[i].map(normalizarTexto);
+    let pontos = 0;
+    celulas.forEach(c => {
+      for (const campo in DICIONARIO_COLUNAS) {
+        if (DICIONARIO_COLUNAS[campo].some(kw => c.includes(kw))) { pontos++; break; }
+      }
+    });
+    if (pontos > melhorPontuacao) { melhorPontuacao = pontos; melhorLinha = i; }
+  }
+  return melhorLinha;
+}
+
+function detectarMapeamento(linhaCabecalho) {
+  const mapa = {};
+  linhaCabecalho.forEach((celula, i) => {
+    const c = normalizarTexto(celula);
+    for (const campo in DICIONARIO_COLUNAS) {
+      if (DICIONARIO_COLUNAS[campo].some(kw => c.includes(kw))) { mapa[i] = campo; return; }
+    }
+    mapa[i] = "ignorar";
+  });
+  return mapa;
+}
+
+let excelLinhas = [];
+let excelLinhaCabecalhoIdx = 0;
+let excelMapeamento = {};
+let registrosExcel = [];
+
+async function renderImportarExcel() {
+  const conteudo = document.getElementById("conteudo");
+  if (!listaUsuarios.length) {
+    try { await carregarDados(); } catch (e) {
+      conteudo.innerHTML = `<div class="msg erro">Erro ao carregar dados: ${e.message}</div>`;
+      return;
+    }
+  }
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Importar Escala por Excel</h2></div>
+    <div class="aviso-modo">
+      Funciona com qualquer tabela em formato normal (uma linha de cabeçalho + uma linha por lançamento).
+      O sistema tenta identificar as colunas sozinho; você confirma ou ajusta antes de processar.
+    </div>
+    <div class="dropzone" id="dropzone-excel">
+      <div id="dropzone-excel-texto">📊 Clique para escolher a planilha (.xlsx, .xls, .csv)</div>
+      <input type="file" id="input-excel" accept=".xlsx,.xls,.csv" />
+    </div>
+    <div id="area-mapeamento"></div>
+    <div id="area-revisao-excel"></div>
+    <div id="area-sugestoes"></div>
+  `;
+  const dz = document.getElementById("dropzone-excel");
+  const input = document.getElementById("input-excel");
+  dz.onclick = () => input.click();
+  input.onchange = () => { if (input.files[0]) processarArquivoExcel(input.files[0]); };
+}
+
+function processarArquivoExcel(file) {
+  const dzTexto = document.getElementById("dropzone-excel-texto");
+  dzTexto.textContent = `Lendo "${file.name}"...`;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: "array" });
+      const primeiraAba = wb.Sheets[wb.SheetNames[0]];
+      excelLinhas = XLSX.utils.sheet_to_json(primeiraAba, { header: 1, raw: true, defval: "" });
+      if (!excelLinhas.length) throw new Error("Planilha vazia.");
+      excelLinhaCabecalhoIdx = detectarCabecalho(excelLinhas);
+      excelMapeamento = detectarMapeamento(excelLinhas[excelLinhaCabecalhoIdx]);
+      dzTexto.textContent = "📊 Clique para escolher outra planilha";
+      renderMapeamento();
+    } catch (err) {
+      dzTexto.textContent = "📊 Clique para escolher a planilha (.xlsx, .xls, .csv)";
+      document.getElementById("area-mapeamento").innerHTML = `<div class="msg erro">Erro ao ler planilha: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderMapeamento() {
+  const area = document.getElementById("area-mapeamento");
+  const linhaCab = excelLinhas[excelLinhaCabecalhoIdx];
+  const linhaAmostra = excelLinhas[excelLinhaCabecalhoIdx + 1] || [];
+  const opcoesCampo = [
+    ["ignorar", "Ignorar"], ["nome", "Nome"], ["data", "Data"],
+    ["horaInicio", "Hora Início"], ["horaFim", "Hora Fim"], ["tipo", "Tipo/Observação"],
+  ];
+
+  area.innerHTML = `
+    <label>Linha do cabeçalho na planilha</label>
+    <select id="sel-linha-cab" style="max-width:200px">
+      ${excelLinhas.slice(0, 10).map((l, i) => `<option value="${i}" ${i === excelLinhaCabecalhoIdx ? "selected" : ""}>Linha ${i + 1}: ${l.slice(0, 3).join(" | ") || "(vazia)"}</option>`).join("")}
+    </select>
+    <div class="grade-mapeamento" id="grade-mapeamento">
+      ${linhaCab.map((celula, i) => `
+        <div class="col-mapeamento">
+          <div class="amostra"><strong>${celula || "(coluna " + (i + 1) + ")"}</strong><br/>ex: ${linhaAmostra[i] ?? ""}</div>
+          <select data-col="${i}">
+            ${opcoesCampo.map(([v, l]) => `<option value="${v}" ${excelMapeamento[i] === v ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+        </div>
+      `).join("")}
+    </div>
+    <button id="btn-processar-excel">Processar planilha</button>
+  `;
+
+  document.getElementById("sel-linha-cab").onchange = (e) => {
+    excelLinhaCabecalhoIdx = Number(e.target.value);
+    excelMapeamento = detectarMapeamento(excelLinhas[excelLinhaCabecalhoIdx]);
+    renderMapeamento();
+  };
+  area.querySelectorAll("[data-col]").forEach(sel => {
+    sel.onchange = () => { excelMapeamento[Number(sel.dataset.col)] = sel.value; };
+  });
+  document.getElementById("btn-processar-excel").onclick = processarLinhasExcel;
+}
+
+function processarLinhasExcel() {
+  const colNome = Object.keys(excelMapeamento).find(k => excelMapeamento[k] === "nome");
+  const colData = Object.keys(excelMapeamento).find(k => excelMapeamento[k] === "data");
+  const colHoraInicio = Object.keys(excelMapeamento).find(k => excelMapeamento[k] === "horaInicio");
+  const colHoraFim = Object.keys(excelMapeamento).find(k => excelMapeamento[k] === "horaFim");
+  const colTipo = Object.keys(excelMapeamento).find(k => excelMapeamento[k] === "tipo");
+
+  if (colNome === undefined) {
+    document.getElementById("area-revisao-excel").innerHTML = `<div class="msg erro">Marque ao menos uma coluna como "Nome" antes de processar.</div>`;
+    return;
+  }
+
+  const linhasDados = excelLinhas.slice(excelLinhaCabecalhoIdx + 1);
+  registrosExcel = linhasDados
+    .map(l => ({
+      nomeDetectado: String(l[colNome] ?? "").trim(),
+      data: colData !== undefined ? parseCelulaData(l[colData]) : "",
+      horaInicio: colHoraInicio !== undefined ? parseCelulaHora(l[colHoraInicio]) : "",
+      horaFim: colHoraFim !== undefined ? parseCelulaHora(l[colHoraFim]) : "",
+      tipo: colTipo !== undefined ? String(l[colTipo] ?? "").trim() : "",
+    }))
+    .filter(r => r.nomeDetectado)
+    .map(r => ({
+      ...r,
+      usuarioId: encontrarUsuarioPorNome(r.nomeDetectado),
+      setorId: usuarioAtual.role === "gestor_setor" ? usuarioAtual.setorId : (listaSetores[0]?.id || ""),
+    }));
+
+  document.getElementById("area-sugestoes").innerHTML = "";
+  renderTabelaRevisaoExcel();
+}
+
+function renderTabelaRevisaoExcel() {
+  const area = document.getElementById("area-revisao-excel");
+  if (!registrosExcel.length) {
+    area.innerHTML = `<div class="vazio">Nenhuma linha com nome válido encontrada.</div>`;
+    return;
+  }
+  const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+  const opcoesSetores = listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
+
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:24px;">
+      <h2 style="font-size:16px;">Revisar antes de importar (${registrosExcel.length} linhas)</h2>
+    </div>
+    <table class="tabela-revisao">
+      <thead><tr><th>Detectado</th><th>Vincular a</th><th>Setor (se novo)</th><th>Data</th><th>Início</th><th>Fim</th><th>Tipo</th><th></th></tr></thead>
+      <tbody id="tbody-revisao-excel"></tbody>
+    </table>
+    <div id="feedback-import-excel" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="btn-importar-excel">Importar linhas válidas</button></div>
+  `;
+
+  const tbody = document.getElementById("tbody-revisao-excel");
+  registrosExcel.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.nomeDetectado}</td>
+      <td>
+        <select data-campo="usuarioId" data-i="${i}">
+          <option value="">— criar novo —</option>
+          ${opcoesUsuarios}
+        </select>
+      </td>
+      <td><select data-campo="setorId" data-i="${i}" style="${r.usuarioId ? "visibility:hidden" : ""}"><option value="">selecione</option>${opcoesSetores}</select></td>
+      <td><input data-campo="data" data-i="${i}" value="${r.data}" placeholder="AAAA-MM-DD" style="width:105px" /></td>
+      <td><input data-campo="horaInicio" data-i="${i}" value="${r.horaInicio}" placeholder="HH:MM" style="width:65px" /></td>
+      <td><input data-campo="horaFim" data-i="${i}" value="${r.horaFim}" placeholder="HH:MM" style="width:65px" /></td>
+      <td><input data-campo="tipo" data-i="${i}" value="${r.tipo}" style="width:90px" /></td>
+      <td><button class="perigo" data-remover="${i}">×</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector(`[data-campo="usuarioId"]`).value = r.usuarioId || "";
+    tr.querySelector(`[data-campo="setorId"]`).value = r.setorId || "";
+  });
+
+  tbody.querySelectorAll("[data-campo]").forEach(el => {
+    el.onchange = () => {
+      registrosExcel[Number(el.dataset.i)][el.dataset.campo] = el.value;
+      if (el.dataset.campo === "usuarioId") renderTabelaRevisaoExcel();
+    };
+  });
+  tbody.querySelectorAll("[data-remover]").forEach(b => {
+    b.onclick = () => { registrosExcel.splice(Number(b.dataset.remover), 1); renderTabelaRevisaoExcel(); };
+  });
+  document.getElementById("btn-importar-excel").onclick = confirmarImportacaoExcel;
+}
+
+function duracaoHorasEntre(horaInicio, horaFim) {
+  const [hi, mi] = horaInicio.split(":").map(Number);
+  const [hf, mf] = horaFim.split(":").map(Number);
+  let min = (hf * 60 + mf) - (hi * 60 + mi);
+  if (min <= 0) min += 24 * 60;
+  return min / 60;
+}
+
+async function confirmarImportacaoExcel() {
+  const btn = document.getElementById("btn-importar-excel");
+  const fb = document.getElementById("feedback-import-excel");
+  btn.disabled = true;
+  fb.innerHTML = "";
+
+  const validos = registrosExcel.filter(r => r.data && r.horaInicio && r.horaFim && (r.usuarioId || r.setorId));
+  if (!validos.length) {
+    fb.innerHTML = `<div class="msg erro">Preencha data, horários e funcionário/setor de pelo menos uma linha.</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  // cria funcionarios novos primeiro, guardando o id
+  for (const r of validos) {
+    if (!r.usuarioId) {
+      try {
+        const resp = await api("/usuarios", { method: "POST", body: JSON.stringify({
+          nome: r.nomeDetectado, email: gerarEmailTemp(r.nomeDetectado), senha: gerarSenhaTemp(),
+          role: "usuario", setorId: Number(r.setorId),
+        }) });
+        r.usuarioId = resp.usuario.id;
+      } catch (e) {
+        r._falhaCriacao = e.message;
+      }
+    }
+  }
+
+  const registros = validos.filter(r => r.usuarioId).map(r => ({
+    usuarioId: r.usuarioId, data: r.data, horaInicio: r.horaInicio, horaFim: r.horaFim, tipo: r.tipo,
+  }));
+  const falhasCriacao = validos.filter(r => r._falhaCriacao).map(r => `${r.nomeDetectado}: ${r._falhaCriacao}`);
+
+  try {
+    const resultado = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "excel" }) });
+    let html = `<div class="msg ok">${resultado.inseridos} lançamento(s) importado(s).</div>`;
+    if (resultado.falhas && resultado.falhas.length) html += `<div class="msg erro">${resultado.falhas.length} falha(s) na importação: ${resultado.falhas.map(f => `linha ${f.linha} (${f.motivo})`).join(", ")}</div>`;
+    if (falhasCriacao.length) html += `<div class="msg erro">${falhasCriacao.length} funcionário(s) não criado(s): ${falhasCriacao.join(", ")}</div>`;
+    fb.innerHTML = html;
+    await carregarDados();
+    renderSugestoesPadrao(registros);
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("btn-importar-excel")) btn.disabled = false;
+  }
+}
+
+function renderSugestoesPadrao(registrosImportados) {
+  const area = document.getElementById("area-sugestoes");
+  if (!listaTiposEscala.length || !registrosImportados.length) { area.innerHTML = ""; return; }
+
+  const porUsuario = {};
+  registrosImportados.forEach(r => {
+    if (!porUsuario[r.usuarioId]) porUsuario[r.usuarioId] = [];
+    porUsuario[r.usuarioId].push(r);
+  });
+
+  const datasTodas = registrosImportados.map(r => r.data).sort();
+  const semanas = Math.max(1, Math.round((new Date(datasTodas[datasTodas.length - 1]) - new Date(datasTodas[0])) / (7 * 86400000)) + 1);
+
+  const sugestoes = Object.entries(porUsuario).map(([usuarioId, regs]) => {
+    const totalHoras = regs.reduce((s, r) => s + duracaoHorasEntre(r.horaInicio, r.horaFim), 0);
+    const mediaSemanal = totalHoras / semanas;
+    let melhor = listaTiposEscala[0], menorDiff = Infinity;
+    listaTiposEscala.forEach(t => {
+      const diff = Math.abs(t.cargaHorariaSemanal - mediaSemanal);
+      if (diff < menorDiff) { menorDiff = diff; melhor = t; }
+    });
+    const usuario = listaUsuarios.find(u => u.id === Number(usuarioId));
+    return { usuarioId: Number(usuarioId), nome: usuario?.nome || `#${usuarioId}`, mediaSemanal, tipoSugerido: melhor, jaTem: usuario?.tipoEscalaId };
+  });
+
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:24px;">
+      <h2 style="font-size:16px;">Sugestão de padrão de escala (pela quantidade importada)</h2>
+    </div>
+    ${sugestoes.map(s => `
+      <div class="sugestao-card">
+        <span><strong>${s.nome}</strong> — média de ${s.mediaSemanal.toFixed(1)}h/semana → sugestão: <strong>${s.tipoSugerido.nome}</strong>${s.jaTem === s.tipoSugerido.id ? " (já é esse)" : ""}</span>
+        ${s.jaTem === s.tipoSugerido.id ? "" : `<button data-aplicar="${s.usuarioId}" data-tipo="${s.tipoSugerido.id}">Aplicar</button>`}
+      </div>
+    `).join("")}
+  `;
+  area.querySelectorAll("[data-aplicar]").forEach(b => {
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await api(`/usuarios/${b.dataset.aplicar}`, { method: "PUT", body: JSON.stringify({ tipoEscalaId: Number(b.dataset.tipo) }) });
+        b.textContent = "Aplicado ✓";
+      } catch (e) {
+        b.disabled = false;
+        alert("Erro: " + e.message);
+      }
+    };
+  });
 }
 
 iniciar();
