@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Pro-Escala</title>
 <style>
+  :root { --cor-primaria: var(--cor-primaria); --cor-primaria-hover: var(--cor-primaria-hover); --cor-primaria-clara: var(--cor-primaria-clara); }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: system-ui, -apple-system, sans-serif;
@@ -22,12 +23,12 @@
     width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155;
     background: #0f172a; color: #e2e8f0; font-size: 14px;
   }
-  input:focus, select:focus { outline: 2px solid #6366f1; border-color: transparent; }
+  input:focus, select:focus { outline: 2px solid var(--cor-primaria); border-color: transparent; }
   button {
     padding: 10px 16px; border: none; border-radius: 8px;
-    background: #6366f1; color: white; font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--cor-primaria); color: white; font-size: 14px; font-weight: 600; cursor: pointer;
   }
-  button:hover { background: #4f46e5; }
+  button:hover { background: var(--cor-primaria-hover); }
   button:disabled { opacity: .6; cursor: not-allowed; }
   button.secundario { background: #334155; }
   button.secundario:hover { background: #475569; }
@@ -38,7 +39,7 @@
   .msg.erro { background: #7f1d1d33; color: #fca5a5; }
   .msg.ok { background: #14532d33; color: #86efac; }
   .toggle { margin-top: 18px; text-align: center; font-size: 13px; color: #94a3b8; }
-  .toggle a { color: #818cf8; cursor: pointer; text-decoration: none; }
+  .toggle a { color: var(--cor-primaria-clara); cursor: pointer; text-decoration: none; }
 
   /* Shell logado */
   header.topo {
@@ -63,16 +64,16 @@
     font-weight: 500; border-bottom: 2px solid transparent;
   }
   nav.abas .aba:hover { background: #24324a; color: #e2e8f0; }
-  nav.abas .aba.ativa { color: #818cf8; border-bottom-color: #818cf8; }
+  nav.abas .aba.ativa { color: var(--cor-primaria-clara); border-bottom-color: var(--cor-primaria-clara); }
 
   .dropzone {
     border: 2px dashed #334155; border-radius: 10px; padding: 32px; text-align: center;
     color: #94a3b8; cursor: pointer; margin-bottom: 18px;
   }
-  .dropzone:hover { border-color: #6366f1; color: #cbd5e1; }
+  .dropzone:hover { border-color: var(--cor-primaria); color: #cbd5e1; }
   .dropzone input { display: none; }
   .progresso-ocr { background: #334155; border-radius: 999px; height: 8px; overflow: hidden; margin: 12px 0; }
-  .progresso-ocr-barra { background: #6366f1; height: 100%; transition: width .2s; }
+  .progresso-ocr-barra { background: var(--cor-primaria); height: 100%; transition: width .2s; }
   textarea.texto-ocr {
     width: 100%; min-height: 140px; background: #0f172a; border: 1px solid #334155; border-radius: 8px;
     color: #e2e8f0; padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 12.5px; resize: vertical;
@@ -129,6 +130,33 @@ let listaUsuarios = [];
 let listaSetores = [];
 let listaTiposEscala = [];
 let editandoId = null;
+let appConfig = {};
+
+function escurecerHex(hex, fator = 0.15) {
+  const h = hex.replace("#", "");
+  const num = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  const r = Math.max(0, Math.floor(((num >> 16) & 255) * (1 - fator)));
+  const g = Math.max(0, Math.floor(((num >> 8) & 255) * (1 - fator)));
+  const b = Math.max(0, Math.floor((num & 255) * (1 - fator)));
+  return `#${[r, g, b].map(x => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function aplicarConfig() {
+  if (appConfig.cor_primaria) {
+    document.documentElement.style.setProperty("--cor-primaria", appConfig.cor_primaria);
+    document.documentElement.style.setProperty("--cor-primaria-hover", escurecerHex(appConfig.cor_primaria, 0.15));
+    document.documentElement.style.setProperty("--cor-primaria-clara", appConfig.cor_primaria);
+  }
+  if (appConfig.nome_instituicao) document.title = `Pro-Escala — ${appConfig.nome_instituicao}`;
+}
+
+async function carregarConfig() {
+  try {
+    const r = await api("/config");
+    appConfig = r.config || {};
+    aplicarConfig();
+  } catch { /* silencioso: branding e' cosmetico, nao trava o app */ }
+}
 
 function getToken() { return localStorage.getItem("pe_token"); }
 function setToken(t) { t ? localStorage.setItem("pe_token", t) : localStorage.removeItem("pe_token"); }
@@ -151,6 +179,7 @@ async function iniciar() {
     try {
       const { usuario } = await api("/me");
       usuarioAtual = usuario;
+      await carregarConfig();
       await renderShell();
       return;
     } catch { setToken(null); }
@@ -196,6 +225,7 @@ async function submitAuth() {
     });
     setToken(token);
     usuarioAtual = usuario;
+    await carregarConfig();
     await renderShell();
   } catch (e) {
     renderAuth(e.message);
@@ -217,10 +247,14 @@ let telaAtual = "funcionarios";
 
 async function renderShell() {
   const podeGerenciarFuncionarios = ["admin", "rh", "gestor_setor"].includes(usuarioAtual.role);
+  const souAdmin = usuarioAtual.role === "admin";
+  const marcaHtml = appConfig.logo_url
+    ? `<img src="${appConfig.logo_url}" alt="logo" style="height:26px;border-radius:4px;object-fit:contain" onerror="this.style.display='none'" />`
+    : "📋";
 
   app.innerHTML = `
     <header class="topo">
-      <div class="marca">📋 Pro-Escala</div>
+      <div class="marca">${marcaHtml} ${appConfig.nome_instituicao || "Pro-Escala"}</div>
       <div class="usuario-info">
         <span>${usuarioAtual.nome}</span>
         <span class="role-badge">${usuarioAtual.role}</span>
@@ -233,6 +267,7 @@ async function renderShell() {
       <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Imagem</button>
       <button class="aba ${telaAtual === "excel" ? "ativa" : ""}" data-aba="excel">Importar Excel</button>
       <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
+      ${souAdmin ? `<button class="aba ${telaAtual === "config" ? "ativa" : ""}" data-aba="config">Configurações</button>` : ""}
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
   `;
@@ -245,6 +280,7 @@ async function renderShell() {
     if (telaAtual === "importar") await renderImportarEscala();
     else if (telaAtual === "excel") await renderImportarExcel();
     else if (telaAtual === "gerar") await renderGerarEscala();
+    else if (telaAtual === "config" && souAdmin) await renderConfiguracoes();
     else await renderFuncionarios();
   } else {
     document.getElementById("conteudo").innerHTML = `
@@ -522,19 +558,20 @@ async function extrairComIA() {
 
 // Parser ingenuo: tenta achar data (dd/mm/aaaa ou aaaa-mm-dd) e horarios (HH:MM) em cada linha.
 // O resto da linha vira o "nome detectado", que o usuario ajusta manualmente na tabela de revisao.
-// Extrai só os nomes de cada linha do texto OCR (ignora linhas que parecem
-// cabeçalho/numeros/codigo de turno, mantendo o que parece nome de pessoa).
+// Extrai só os nomes de cada linha do texto OCR. Critério rígido de propósito: uma
+// linha só passa se TODAS as palavras forem puramente alfabéticas (nada de "1BAS17",
+// "07AI" etc — grade/código de turno sempre mistura letra com número) e o total de
+// palavras couber num nome de pessoa (1 a 3). Prefere descartar demais a deixar ruído.
 function linhasParaNomes(texto) {
   return texto
     .split("\n")
     .map(l => l.trim())
     .filter(Boolean)
-    .map(l => l.replace(/[|\[\]]+/g, " ").replace(/\s+/g, " ").trim())
+    .map(l => l.replace(/[|\[\]_]+/g, " ").replace(/\s+/g, " ").trim())
     .filter(l => {
-      if (l.length < 2) return false;
-      const letras = (l.match(/[A-Za-zÀ-ÿ]/g) || []).length;
-      const digitos = (l.match(/[0-9]/g) || []).length;
-      return letras > digitos; // linha "de nome" tem mais letra que digito; descarta linhas de grade/horario
+      const palavras = l.split(" ").filter(Boolean);
+      if (!palavras.length || palavras.length > 3) return false;
+      return palavras.every(p => /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*$/.test(p) && p.length >= 2);
     });
 }
 
@@ -612,7 +649,7 @@ async function processarImagem(file) {
 function renderTextoBruto() {
   const area = document.getElementById("area-texto-bruto");
   area.innerHTML = `
-    <label>Texto lido da imagem (edite antes de extrair os nomes, se precisar — apague linhas de grade/números)</label>
+    <label>Texto lido da imagem (revise antes de extrair — cada nome precisa estar em uma linha própria; separe nomes que vieram colados na mesma linha, apague o resto)</label>
     <textarea class="texto-ocr" id="texto-ocr">${textoOcrBruto}</textarea>
     <div style="margin-top:10px;"><button id="btn-gerar-linhas">Extrair nomes</button></div>
   `;
@@ -1352,6 +1389,71 @@ function renderSugestoesPadrao(registrosImportados) {
       }
     };
   });
+}
+
+/* ---------- Configurações (admin/branding) ---------- */
+async function renderConfiguracoes() {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Configurações do sistema</h2></div>
+    <div class="aviso-modo">Essas configurações valem para todo mundo que usa o sistema — nome, cor e logo aparecem no cabeçalho de todos os usuários.</div>
+
+    <label>Nome da instituição</label>
+    <input id="cfg-nome" value="${appConfig.nome_instituicao || ""}" placeholder="Ex: Hospital São Lucas" style="max-width:360px" />
+
+    <label>Cor primária (botões, destaques)</label>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="color" id="cfg-cor" value="${appConfig.cor_primaria || "#6366f1"}" style="width:56px; height:38px; padding:2px; max-width:56px" />
+      <input id="cfg-cor-texto" value="${appConfig.cor_primaria || "#6366f1"}" style="max-width:120px" />
+    </div>
+
+    <label>URL do logo (imagem já hospedada, ex: link do Google Drive/Imgur)</label>
+    <input id="cfg-logo" value="${appConfig.logo_url || ""}" placeholder="https://..." style="max-width:420px" />
+    <div id="cfg-preview-logo" style="margin-top:8px;"></div>
+
+    <div id="cfg-feedback" style="margin-top:16px;"></div>
+    <div style="margin-top:16px;"><button id="cfg-salvar">Salvar configurações</button></div>
+  `;
+
+  const inputCor = document.getElementById("cfg-cor");
+  const inputCorTexto = document.getElementById("cfg-cor-texto");
+  inputCor.oninput = () => { inputCorTexto.value = inputCor.value; };
+  inputCorTexto.oninput = () => { if (/^#[0-9A-Fa-f]{6}$/.test(inputCorTexto.value)) inputCor.value = inputCorTexto.value; };
+
+  const inputLogo = document.getElementById("cfg-logo");
+  const atualizarPreviewLogo = () => {
+    const url = inputLogo.value.trim();
+    document.getElementById("cfg-preview-logo").innerHTML = url
+      ? `<img src="${url}" style="height:40px;border-radius:6px;object-fit:contain" onerror="this.outerHTML='<span style=\\'color:#fca5a5;font-size:12.5px\\'>Não consegui carregar essa URL de imagem.</span>'" />`
+      : "";
+  };
+  inputLogo.oninput = atualizarPreviewLogo;
+  atualizarPreviewLogo();
+
+  document.getElementById("cfg-salvar").onclick = salvarConfiguracoes;
+}
+
+async function salvarConfiguracoes() {
+  const btn = document.getElementById("cfg-salvar");
+  const fb = document.getElementById("cfg-feedback");
+  btn.disabled = true;
+  try {
+    const corTexto = document.getElementById("cfg-cor-texto").value.trim();
+    const body = {
+      nome_instituicao: document.getElementById("cfg-nome").value.trim(),
+      cor_primaria: /^#[0-9A-Fa-f]{6}$/.test(corTexto) ? corTexto : "#6366f1",
+      logo_url: document.getElementById("cfg-logo").value.trim(),
+    };
+    await api("/config", { method: "PUT", body: JSON.stringify(body) });
+    appConfig = { ...appConfig, ...body };
+    aplicarConfig();
+    await renderShell(); // atualiza cabecalho com nome/logo novos e mantém a aba de config
+    document.getElementById("cfg-feedback").innerHTML = `<div class="msg ok">Configurações salvas.</div>`;
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("cfg-salvar")) btn.disabled = false;
+  }
 }
 
 iniciar();
