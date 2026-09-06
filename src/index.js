@@ -378,6 +378,45 @@ async function handleApi(req, env, url) {
     return json({ escalas: results });
   }
 
+  // GET /codigos-plantao — qualquer usuario logado
+  if (path === "/codigos-plantao" && method === "GET") {
+    const { results } = await env.DB.prepare("SELECT * FROM codigos_plantao WHERE ativo = 1 ORDER BY sigla").all();
+    return json({ codigos: results });
+  }
+
+  // POST /codigos-plantao — so admin cria codigo novo
+  if (path === "/codigos-plantao" && method === "POST") {
+    if (usuario.role !== "admin") return erro("Apenas admin pode criar códigos de plantão.", 403);
+    const body = await req.json().catch(() => ({}));
+    const sigla = (body.sigla || "").trim();
+    const descricao = (body.descricao || "").trim();
+    if (!sigla || !descricao) return erro("Informe sigla e descrição.");
+    const existe = await env.DB.prepare("SELECT id FROM codigos_plantao WHERE sigla = ?").bind(sigla).first();
+    if (existe) return erro("Já existe um código com essa sigla.");
+    const res = await env.DB.prepare(
+      "INSERT INTO codigos_plantao (sigla, descricao, hora_inicio, hora_fim) VALUES (?,?,?,?)"
+    ).bind(sigla, descricao, body.horaInicio || null, body.horaFim || null).run();
+    return json({ id: res.meta.last_row_id });
+  }
+
+  // PUT /codigos-plantao/:id — so admin edita
+  const mCodigo = path.match(/^\/codigos-plantao\/(\d+)$/);
+  if (mCodigo && method === "PUT") {
+    if (usuario.role !== "admin") return erro("Apenas admin pode editar códigos de plantão.", 403);
+    const id = Number(mCodigo[1]);
+    const body = await req.json().catch(() => ({}));
+    const campos = [];
+    const valores = [];
+    if (typeof body.descricao === "string" && body.descricao.trim()) { campos.push("descricao = ?"); valores.push(body.descricao.trim()); }
+    if (body.horaInicio !== undefined) { campos.push("hora_inicio = ?"); valores.push(body.horaInicio || null); }
+    if (body.horaFim !== undefined) { campos.push("hora_fim = ?"); valores.push(body.horaFim || null); }
+    if (typeof body.ativo === "boolean") { campos.push("ativo = ?"); valores.push(body.ativo ? 1 : 0); }
+    if (!campos.length) return erro("Nada para atualizar.");
+    valores.push(id);
+    await env.DB.prepare(`UPDATE codigos_plantao SET ${campos.join(", ")} WHERE id = ?`).bind(...valores).run();
+    return json({ ok: true });
+  }
+
   return erro("Rota nao encontrada.", 404);
 }
 

@@ -93,6 +93,14 @@
     display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 13px;
   }
   .sugestao-card button { padding: 6px 12px; font-size: 12.5px; }
+  .grupo-grade-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .grupo-grade-cabecalho { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .grupo-grade-cabecalho select { max-width: 220px; }
+  .grupo-grade-info { font-size: 12px; color: #64748b; }
+  .chips-dias { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-dia { background: #334155; padding: 3px 8px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .chip-dia.desconhecido { background: #7f1d1d55; color: #fca5a5; }
+  .chip-dia button { background: transparent; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 13px; line-height: 1; }
 
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #293548; }
@@ -289,12 +297,15 @@ async function renderShell() {
   }
 }
 
+let listaCodigosPlantao = [];
+
 /* ---------- Tela de Funcionários ---------- */
 async function carregarDados() {
-  const [u, s, t] = await Promise.all([api("/usuarios"), api("/setores"), api("/tipos-escala")]);
+  const [u, s, t, c] = await Promise.all([api("/usuarios"), api("/setores"), api("/tipos-escala"), api("/codigos-plantao")]);
   listaUsuarios = u.usuarios;
   listaSetores = s.setores;
   listaTiposEscala = t.tiposEscala;
+  listaCodigosPlantao = c.codigos;
 }
 
 async function renderFuncionarios(filtro = "") {
@@ -1036,11 +1047,13 @@ async function confirmarGeracao() {
 
 /* ---------- Importar Escala (Excel) ---------- */
 const DICIONARIO_COLUNAS = {
-  nome: ["nome", "funcionario", "colaborador", "servidor", "profissional", "empregado"],
+  nome: ["nome", "funcionario", "colaborador", "servidor", "profissional", "empregado", "medico"],
   data: ["data", "dia", "date"],
   horaInicio: ["inicio", "entrada", "hora inicio", "hora de inicio", "ini", "start", "de"],
   horaFim: ["fim", "saida", "termino", "final", "hora fim", "hora de saida", "ate", "end"],
   tipo: ["tipo", "turno", "observacao", "obs", "plantao"],
+  especialidade: ["especialidade", "setor", "area", "servico"],
+  crm: ["crm", "registro", "cro", "conselho", "coren"],
 };
 
 function normalizarTexto(s) {
@@ -1108,6 +1121,7 @@ let excelLinhas = [];
 let excelLinhaCabecalhoIdx = 0;
 let excelMapeamento = {};
 let registrosExcel = [];
+let formatoExcel = "lista"; // 'lista' (uma linha por lançamento) ou 'grade' (médico x dia)
 
 async function renderImportarExcel() {
   const conteudo = document.getElementById("conteudo");
@@ -1119,10 +1133,11 @@ async function renderImportarExcel() {
   }
   conteudo.innerHTML = `
     <div class="cabecalho-lista"><h2>Importar Escala por Excel</h2></div>
-    <div class="aviso-modo">
-      Funciona com qualquer tabela em formato normal (uma linha de cabeçalho + uma linha por lançamento).
-      O sistema tenta identificar as colunas sozinho; você confirma ou ajusta antes de processar.
+    <div style="display:flex; gap:16px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:6px; margin:0;"><input type="radio" name="formato-excel" value="lista" style="width:auto" ${formatoExcel === "lista" ? "checked" : ""} /> Lista (uma linha por lançamento)</label>
+      <label style="display:flex; align-items:center; gap:6px; margin:0;"><input type="radio" name="formato-excel" value="grade" style="width:auto" ${formatoExcel === "grade" ? "checked" : ""} /> Grade (médico × dia do mês, com códigos)</label>
     </div>
+    <div class="aviso-modo" id="aviso-formato-excel"></div>
     <div class="dropzone" id="dropzone-excel">
       <div id="dropzone-excel-texto">📊 Clique para escolher a planilha (.xlsx, .xls, .csv)</div>
       <input type="file" id="input-excel" accept=".xlsx,.xls,.csv" />
@@ -1131,10 +1146,20 @@ async function renderImportarExcel() {
     <div id="area-revisao-excel"></div>
     <div id="area-sugestoes"></div>
   `;
+  atualizarAvisoFormatoExcel();
+  document.querySelectorAll('input[name="formato-excel"]').forEach(r => {
+    r.onchange = () => { formatoExcel = r.value; atualizarAvisoFormatoExcel(); };
+  });
   const dz = document.getElementById("dropzone-excel");
   const input = document.getElementById("input-excel");
   dz.onclick = () => input.click();
   input.onchange = () => { if (input.files[0]) processarArquivoExcel(input.files[0]); };
+}
+
+function atualizarAvisoFormatoExcel() {
+  document.getElementById("aviso-formato-excel").innerHTML = formatoExcel === "lista"
+    ? "Funciona com qualquer tabela em formato normal (uma linha de cabeçalho + uma linha por lançamento, com data e horários). O sistema tenta identificar as colunas sozinho; você confirma ou ajusta antes de processar."
+    : "Para escalas em grade tipo hospitalar: uma linha por médico, uma coluna por dia do mês (01, 02, 03...), célula com um código (S, N, P, 1º, MT etc). Você confirma as colunas de identificação e o mês/ano; o sistema usa o dicionário de códigos de plantão pra entender cada célula.";
 }
 
 function processarArquivoExcel(file) {
@@ -1148,9 +1173,14 @@ function processarArquivoExcel(file) {
       excelLinhas = XLSX.utils.sheet_to_json(primeiraAba, { header: 1, raw: true, defval: "" });
       if (!excelLinhas.length) throw new Error("Planilha vazia.");
       excelLinhaCabecalhoIdx = detectarCabecalho(excelLinhas);
-      excelMapeamento = detectarMapeamento(excelLinhas[excelLinhaCabecalhoIdx]);
       dzTexto.textContent = "📊 Clique para escolher outra planilha";
-      renderMapeamento();
+      if (formatoExcel === "grade") {
+        excelMapeamentoGrade = detectarMapeamentoGrade(excelLinhas[excelLinhaCabecalhoIdx]);
+        renderMapeamentoGrade();
+      } else {
+        excelMapeamento = detectarMapeamento(excelLinhas[excelLinhaCabecalhoIdx]);
+        renderMapeamento();
+      }
     } catch (err) {
       dzTexto.textContent = "📊 Clique para escolher a planilha (.xlsx, .xls, .csv)";
       document.getElementById("area-mapeamento").innerHTML = `<div class="msg erro">Erro ao ler planilha: ${err.message}</div>`;
@@ -1285,6 +1315,253 @@ function renderTabelaRevisaoExcel() {
   document.getElementById("btn-importar-excel").onclick = confirmarImportacaoExcel;
 }
 
+/* ---------- Importar Excel — modo Grade (médico x dia, com códigos) ---------- */
+let excelMapeamentoGrade = {};
+let excelGradeMesAno = new Date().toISOString().slice(0, 7);
+let gruposGrade = [];
+
+function detectarMapeamentoGrade(linhaCabecalho) {
+  const mapa = {};
+  linhaCabecalho.forEach((celula, i) => {
+    const c = normalizarTexto(celula);
+    const numero = parseInt(String(celula).replace(/\D/g, ""), 10);
+    if (DICIONARIO_COLUNAS.nome.some(kw => c.includes(kw))) { mapa[i] = { campo: "nome" }; return; }
+    if (DICIONARIO_COLUNAS.especialidade.some(kw => c.includes(kw))) { mapa[i] = { campo: "especialidade" }; return; }
+    if (DICIONARIO_COLUNAS.crm.some(kw => c.includes(kw))) { mapa[i] = { campo: "crm" }; return; }
+    if (!isNaN(numero) && numero >= 1 && numero <= 31 && String(celula).trim() !== "") { mapa[i] = { campo: "dia", dia: numero }; return; }
+    mapa[i] = { campo: "ignorar" };
+  });
+  return mapa;
+}
+
+function renderMapeamentoGrade() {
+  const area = document.getElementById("area-mapeamento");
+  const linhaCab = excelLinhas[excelLinhaCabecalhoIdx];
+  const linhaAmostra = excelLinhas[excelLinhaCabecalhoIdx + 1] || [];
+  const opcoesCampo = [["ignorar", "Ignorar"], ["nome", "Nome"], ["especialidade", "Especialidade"], ["crm", "CRM/Registro"], ["dia", "Dia do mês"]];
+
+  area.innerHTML = `
+    <label>Linha do cabeçalho na planilha</label>
+    <select id="sel-linha-cab-grade" style="max-width:200px">
+      ${excelLinhas.slice(0, 10).map((l, i) => `<option value="${i}" ${i === excelLinhaCabecalhoIdx ? "selected" : ""}>Linha ${i + 1}: ${l.slice(0, 3).join(" | ") || "(vazia)"}</option>`).join("")}
+    </select>
+    <label>Mês/Ano dessa grade</label>
+    <input type="month" id="grade-mes-ano" value="${excelGradeMesAno}" style="max-width:180px" />
+    <div class="grade-mapeamento" id="grade-cols">
+      ${linhaCab.map((celula, i) => {
+        const m = excelMapeamentoGrade[i] || { campo: "ignorar" };
+        return `
+        <div class="col-mapeamento">
+          <div class="amostra"><strong>${celula || "(coluna " + (i + 1) + ")"}</strong><br/>ex: ${linhaAmostra[i] ?? ""}</div>
+          <select data-col="${i}">
+            ${opcoesCampo.map(([v, l]) => `<option value="${v}" ${m.campo === v ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+          ${m.campo === "dia" ? `<input type="number" min="1" max="31" data-dia-de="${i}" value="${m.dia}" style="margin-top:6px" />` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+    <button id="btn-processar-grade">Processar planilha</button>
+  `;
+
+  document.getElementById("sel-linha-cab-grade").onchange = (e) => {
+    excelLinhaCabecalhoIdx = Number(e.target.value);
+    excelMapeamentoGrade = detectarMapeamentoGrade(excelLinhas[excelLinhaCabecalhoIdx]);
+    renderMapeamentoGrade();
+  };
+  area.querySelectorAll("[data-col]").forEach(sel => {
+    sel.onchange = () => {
+      const i = Number(sel.dataset.col);
+      excelMapeamentoGrade[i] = sel.value === "dia" ? { campo: "dia", dia: parseInt(String(linhaCab[i]).replace(/\D/g, ""), 10) || 1 } : { campo: sel.value };
+      excelGradeMesAno = document.getElementById("grade-mes-ano").value || excelGradeMesAno;
+      renderMapeamentoGrade();
+    };
+  });
+  area.querySelectorAll("[data-dia-de]").forEach(inp => {
+    inp.onchange = () => { excelMapeamentoGrade[Number(inp.dataset.diaDe)].dia = Number(inp.value); };
+  });
+  document.getElementById("btn-processar-grade").onclick = () => {
+    excelGradeMesAno = document.getElementById("grade-mes-ano").value;
+    processarLinhasGrade();
+  };
+}
+
+function processarLinhasGrade() {
+  const entradas = Object.entries(excelMapeamentoGrade);
+  const colNome = entradas.find(([, m]) => m.campo === "nome")?.[0];
+  const colEsp = entradas.find(([, m]) => m.campo === "especialidade")?.[0];
+  const colCrm = entradas.find(([, m]) => m.campo === "crm")?.[0];
+  const colsDia = entradas.filter(([, m]) => m.campo === "dia").map(([idx, m]) => ({ idx: Number(idx), dia: m.dia }));
+
+  if (colNome === undefined) {
+    document.getElementById("area-revisao-excel").innerHTML = `<div class="msg erro">Marque ao menos uma coluna como "Nome".</div>`;
+    return;
+  }
+  if (!excelGradeMesAno) {
+    document.getElementById("area-revisao-excel").innerHTML = `<div class="msg erro">Informe o mês/ano da grade.</div>`;
+    return;
+  }
+  if (!colsDia.length) {
+    document.getElementById("area-revisao-excel").innerHTML = `<div class="msg erro">Nenhuma coluna marcada como "Dia do mês".</div>`;
+    return;
+  }
+
+  const linhasDados = excelLinhas.slice(excelLinhaCabecalhoIdx + 1);
+  gruposGrade = linhasDados
+    .map(l => {
+      const nome = String(l[colNome] ?? "").trim();
+      if (!nome) return null;
+      const entradasDia = colsDia
+        .map(({ idx, dia }) => {
+          const valor = String(l[idx] ?? "").trim();
+          if (!valor) return null;
+          const siglaNorm = valor.toUpperCase().replace(/°/g, "º");
+          const codigoInfo = listaCodigosPlantao.find(c => c.sigla.toUpperCase().replace(/°/g, "º") === siglaNorm);
+          return {
+            data: `${excelGradeMesAno}-${String(dia).padStart(2, "0")}`,
+            codigo: valor,
+            tipo: codigoInfo ? `${valor} — ${codigoInfo.descricao}` : valor,
+            horaInicio: codigoInfo?.hora_inicio || "00:00",
+            horaFim: codigoInfo?.hora_fim || "23:59",
+            desconhecido: !codigoInfo,
+          };
+        })
+        .filter(Boolean);
+      if (!entradasDia.length) return null;
+      return {
+        nomeDetectado: nome,
+        especialidade: colEsp !== undefined ? String(l[colEsp] ?? "").trim() : "",
+        crm: colCrm !== undefined ? String(l[colCrm] ?? "").trim() : "",
+        usuarioId: encontrarUsuarioPorNome(nome),
+        setorId: usuarioAtual.role === "gestor_setor" ? usuarioAtual.setorId : (listaSetores[0]?.id || ""),
+        entradas: entradasDia,
+      };
+    })
+    .filter(Boolean);
+
+  document.getElementById("area-sugestoes").innerHTML = "";
+  renderRevisaoGrade();
+}
+
+function renderRevisaoGrade() {
+  const area = document.getElementById("area-revisao-excel");
+  if (!gruposGrade.length) {
+    area.innerHTML = `<div class="vazio">Nenhum lançamento encontrado nas colunas marcadas como "Dia do mês".</div>`;
+    return;
+  }
+  const totalLancamentos = gruposGrade.reduce((s, g) => s + g.entradas.length, 0);
+  const totalDesconhecidos = gruposGrade.reduce((s, g) => s + g.entradas.filter(e => e.desconhecido).length, 0);
+  const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+  const opcoesSetores = listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
+
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:24px;">
+      <h2 style="font-size:16px;">Revisar antes de importar (${gruposGrade.length} médicos, ${totalLancamentos} lançamentos)</h2>
+    </div>
+    ${totalDesconhecidos ? `<div class="msg erro">${totalDesconhecidos} lançamento(s) com código não cadastrado no dicionário — foram importados com o código literal, sem horário definido. Cadastre o significado em Configurações → Códigos de Plantão.</div>` : ""}
+    <div id="grupos-grade"></div>
+    <div id="feedback-import-excel" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="btn-importar-grade">Importar tudo</button></div>
+  `;
+
+  const cont = document.getElementById("grupos-grade");
+  gruposGrade.forEach((g, gi) => {
+    const card = document.createElement("div");
+    card.className = "grupo-grade-card";
+    card.innerHTML = `
+      <div class="grupo-grade-cabecalho">
+        <strong>${g.nomeDetectado}</strong>
+        <span class="grupo-grade-info">${g.especialidade || ""} ${g.crm ? "· " + g.crm : ""}</span>
+        <select data-grupo-campo="usuarioId" data-gi="${gi}">
+          <option value="">— criar novo funcionário —</option>
+          ${opcoesUsuarios}
+        </select>
+        <select data-grupo-campo="setorId" data-gi="${gi}" style="${g.usuarioId ? "visibility:hidden" : ""}">
+          <option value="">selecione o setor</option>
+          ${opcoesSetores}
+        </select>
+        <span class="grupo-grade-info">${g.entradas.length} lançamento(s)</span>
+      </div>
+      <div class="chips-dias" data-chips="${gi}"></div>
+    `;
+    cont.appendChild(card);
+    card.querySelector(`[data-grupo-campo="usuarioId"]`).value = g.usuarioId || "";
+    card.querySelector(`[data-grupo-campo="setorId"]`).value = g.setorId || "";
+
+    const chipsEl = card.querySelector(`[data-chips="${gi}"]`);
+    const renderChips = () => {
+      chipsEl.innerHTML = g.entradas.map((e, ei) => `
+        <span class="chip-dia ${e.desconhecido ? "desconhecido" : ""}" title="${e.tipo}">
+          ${e.data.slice(8)}/${e.data.slice(5, 7)}: ${e.codigo}
+          <button data-remover-entrada="${ei}">×</button>
+        </span>
+      `).join("");
+      chipsEl.querySelectorAll("[data-remover-entrada]").forEach(b => {
+        b.onclick = () => {
+          g.entradas.splice(Number(b.dataset.removerEntrada), 1);
+          if (!g.entradas.length) { gruposGrade.splice(gi, 1); renderRevisaoGrade(); }
+          else renderChips();
+        };
+      });
+    };
+    renderChips();
+
+    card.querySelector(`[data-grupo-campo="usuarioId"]`).onchange = (e) => {
+      g.usuarioId = e.target.value ? Number(e.target.value) : "";
+      card.querySelector(`[data-grupo-campo="setorId"]`).style.visibility = g.usuarioId ? "hidden" : "visible";
+    };
+    card.querySelector(`[data-grupo-campo="setorId"]`).onchange = (e) => { g.setorId = e.target.value ? Number(e.target.value) : ""; };
+  });
+
+  document.getElementById("btn-importar-grade").onclick = confirmarImportacaoGrade;
+}
+
+async function confirmarImportacaoGrade() {
+  const btn = document.getElementById("btn-importar-grade");
+  const fb = document.getElementById("feedback-import-excel");
+  btn.disabled = true;
+  fb.innerHTML = "";
+
+  const validos = gruposGrade.filter(g => g.usuarioId || g.setorId);
+  if (!validos.length) {
+    fb.innerHTML = `<div class="msg erro">Vincule ou defina o setor de ao menos um médico antes de importar.</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  const falhasCriacao = [];
+  for (const g of validos) {
+    if (!g.usuarioId) {
+      try {
+        const resp = await api("/usuarios", { method: "POST", body: JSON.stringify({
+          nome: g.nomeDetectado, email: gerarEmailTemp(g.nomeDetectado), senha: gerarSenhaTemp(),
+          role: "usuario", setorId: Number(g.setorId),
+        }) });
+        g.usuarioId = resp.usuario.id;
+      } catch (e) {
+        falhasCriacao.push(`${g.nomeDetectado}: ${e.message}`);
+      }
+    }
+  }
+
+  const registros = [];
+  validos.filter(g => g.usuarioId).forEach(g => {
+    g.entradas.forEach(e => registros.push({ usuarioId: g.usuarioId, data: e.data, horaInicio: e.horaInicio, horaFim: e.horaFim, tipo: e.tipo }));
+  });
+
+  try {
+    const resultado = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "excel" }) });
+    let html = `<div class="msg ok">${resultado.inseridos} lançamento(s) importado(s).</div>`;
+    if (resultado.falhas && resultado.falhas.length) html += `<div class="msg erro">${resultado.falhas.length} falha(s): ${resultado.falhas.map(f => `linha ${f.linha} (${f.motivo})`).join(", ")}</div>`;
+    if (falhasCriacao.length) html += `<div class="msg erro">${falhasCriacao.length} funcionário(s) não criado(s): ${falhasCriacao.join(", ")}</div>`;
+    fb.innerHTML = html;
+    await carregarDados();
+  } catch (e) {
+    fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+  } finally {
+    if (document.getElementById("btn-importar-grade")) btn.disabled = false;
+  }
+}
+
 function duracaoHorasEntre(horaInicio, horaFim) {
   const [hi, mi] = horaInicio.split(":").map(Number);
   const [hf, mf] = horaFim.split(":").map(Number);
@@ -1413,7 +1690,12 @@ async function renderConfiguracoes() {
 
     <div id="cfg-feedback" style="margin-top:16px;"></div>
     <div style="margin-top:16px;"><button id="cfg-salvar">Salvar configurações</button></div>
+
+    <div class="cabecalho-lista" style="margin-top:36px;"><h2 style="font-size:16px;">Códigos de Plantão (usados na importação de Excel em grade)</h2></div>
+    <div id="cfg-codigos"></div>
   `;
+
+  renderCodigosPlantao();
 
   const inputCor = document.getElementById("cfg-cor");
   const inputCorTexto = document.getElementById("cfg-cor-texto");
@@ -1454,6 +1736,79 @@ async function salvarConfiguracoes() {
   } finally {
     if (document.getElementById("cfg-salvar")) btn.disabled = false;
   }
+}
+
+async function renderCodigosPlantao() {
+  const area = document.getElementById("cfg-codigos");
+  area.innerHTML = `<div class="vazio">Carregando...</div>`;
+  try {
+    const r = await api("/codigos-plantao");
+    listaCodigosPlantao = r.codigos;
+  } catch (e) {
+    area.innerHTML = `<div class="msg erro">Erro ao carregar códigos: ${e.message}</div>`;
+    return;
+  }
+
+  area.innerHTML = `
+    <table class="tabela-revisao">
+      <thead><tr><th>Sigla</th><th>Descrição</th><th>Início</th><th>Fim</th><th></th></tr></thead>
+      <tbody id="cfg-codigos-tbody"></tbody>
+    </table>
+    <div style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input id="novo-cod-sigla" placeholder="Sigla (ex: NIR)" style="max-width:100px" />
+      <input id="novo-cod-desc" placeholder="Descrição" style="max-width:260px" />
+      <input id="novo-cod-inicio" placeholder="HH:MM (opcional)" style="max-width:110px" />
+      <input id="novo-cod-fim" placeholder="HH:MM (opcional)" style="max-width:110px" />
+      <button class="secundario" id="btn-add-codigo">+ Código</button>
+    </div>
+    <div id="cfg-codigos-feedback" style="margin-top:10px;"></div>
+  `;
+
+  const tbody = document.getElementById("cfg-codigos-tbody");
+  listaCodigosPlantao.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${c.sigla}</strong></td>
+      <td><input data-campo="descricao" data-id="${c.id}" value="${c.descricao.replace(/"/g, "&quot;")}" style="width:100%" /></td>
+      <td><input data-campo="hora_inicio" data-id="${c.id}" value="${c.hora_inicio || ""}" placeholder="HH:MM" style="width:75px" /></td>
+      <td><input data-campo="hora_fim" data-id="${c.id}" value="${c.hora_fim || ""}" placeholder="HH:MM" style="width:75px" /></td>
+      <td><button class="secundario" data-salvar-codigo="${c.id}">Salvar</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-salvar-codigo]").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.salvarCodigo;
+      const linha = btn.closest("tr");
+      const descricao = linha.querySelector(`[data-campo="descricao"]`).value.trim();
+      const horaInicio = linha.querySelector(`[data-campo="hora_inicio"]`).value.trim();
+      const horaFim = linha.querySelector(`[data-campo="hora_fim"]`).value.trim();
+      const fb = document.getElementById("cfg-codigos-feedback");
+      try {
+        await api(`/codigos-plantao/${id}`, { method: "PUT", body: JSON.stringify({ descricao, horaInicio: horaInicio || null, horaFim: horaFim || null }) });
+        fb.innerHTML = `<div class="msg ok">Código atualizado.</div>`;
+        setTimeout(() => { if (fb) fb.innerHTML = ""; }, 2500);
+      } catch (e) {
+        fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+      }
+    };
+  });
+
+  document.getElementById("btn-add-codigo").onclick = async () => {
+    const fb = document.getElementById("cfg-codigos-feedback");
+    const sigla = document.getElementById("novo-cod-sigla").value.trim();
+    const descricao = document.getElementById("novo-cod-desc").value.trim();
+    const horaInicio = document.getElementById("novo-cod-inicio").value.trim();
+    const horaFim = document.getElementById("novo-cod-fim").value.trim();
+    if (!sigla || !descricao) { fb.innerHTML = `<div class="msg erro">Preencha sigla e descrição.</div>`; return; }
+    try {
+      await api("/codigos-plantao", { method: "POST", body: JSON.stringify({ sigla, descricao, horaInicio: horaInicio || null, horaFim: horaFim || null }) });
+      await renderCodigosPlantao();
+    } catch (e) {
+      fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
+    }
+  };
 }
 
 iniciar();

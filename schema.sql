@@ -100,3 +100,32 @@ INSERT OR IGNORE INTO tipos_escala (id, nome, carga_horaria_semanal, blocos, reg
 (4, '44h semanais (2x4h com intervalo de 1h)', 44,
  '[{"inicio":"07:00","fim":"11:00"},{"inicio":"12:00","fim":"16:00"}]',
  'Dois blocos de 4h com 1h de intervalo entre eles (ex: 07-11, intervalo 11-12, 12-16), de segunda a sexta.');
+
+CREATE TABLE IF NOT EXISTS codigos_plantao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sigla TEXT NOT NULL UNIQUE,   -- ex: '1º', 'S', 'N', 'P', 'MT'
+    descricao TEXT NOT NULL,
+    hora_inicio TEXT,             -- opcional: HH:MM, deixado em branco quando o significado é ambíguo
+    hora_fim TEXT,
+    ativo INTEGER NOT NULL DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+-- Códigos comuns de escala de sobreaviso/plantão (baseado em legenda tipica hospitalar).
+-- Sem hora_inicio/hora_fim propositalmente onde o significado varia por instituição —
+-- edite em Configurações depois de confirmar o que cada um significa na sua escala.
+INSERT OR IGNORE INTO codigos_plantao (sigla, descricao) VALUES
+('1º', '1º Anestesista/Cirurgião do dia'),
+('2º', '2º Anestesista/Cirurgião do dia'),
+('3º', '3º Anestesista/Cirurgião do dia'),
+('4º', '4º Anestesista do dia'),
+('5º', '5º Anestesista do dia'),
+('S', 'Sobreaviso'),
+('N', 'Noturno'),
+('P', 'Plantão'),
+('M', 'Manhã'),
+('MT', 'Manhã/Tarde (confirme o significado — legenda original ambígua)'),
+('MN', 'Manhã/Noite'),
+('T', 'Diarista / Tarde (confirme o significado — legenda original ambígua)'),
+('X', 'Diarista/Rotina'),
+('NIR', 'Médico NIR');
