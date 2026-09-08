@@ -1,3 +1,6 @@
+-- ⚠️ OBSOLETA se seu banco passou pelo bug corrigido em migrations/006 (coluna
+-- 'origem' nunca existiu porque a 002 falhou silenciosamente). Nesse caso, NÃO
+-- rode esta migração — rode só a 006, que não usa CHECK e evita esse problema.
 -- Migracao: adiciona 'padrao' como origem valida em escalas.origem
 -- SQLite nao permite ALTER de CHECK constraint direto, entao recriamos a tabela.
 -- Comando: wrangler d1 execute pro-escala --remote --file=./migrations/004_origem_padrao.sql

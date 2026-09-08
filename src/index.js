@@ -361,19 +361,21 @@ async function handleApi(req, env, url) {
     return json({ removidos: res.meta.changes });
   }
 
-  // GET /escalas?userId=&de=&ate= — lista escalas com filtros simples
+  // GET /escalas?userId=&de=&ate=&setorId= — lista escalas com filtros simples
   if (path === "/escalas" && method === "GET") {
     const userId = url.searchParams.get("userId");
     const de = url.searchParams.get("de");
     const ate = url.searchParams.get("ate");
-    let sql = "SELECT * FROM escalas WHERE 1=1";
+    const setorId = url.searchParams.get("setorId");
+    let sql = "SELECT escalas.*, users.nome AS usuario_nome FROM escalas JOIN users ON users.id = escalas.user_id WHERE 1=1";
     const binds = [];
-    if (usuario.role === "gestor_setor") { sql += " AND setor_id = ?"; binds.push(usuario.setor_id); }
-    else if (usuario.role === "usuario") { sql += " AND user_id = ?"; binds.push(usuario.id); }
-    if (userId) { sql += " AND user_id = ?"; binds.push(Number(userId)); }
-    if (de) { sql += " AND data >= ?"; binds.push(de); }
-    if (ate) { sql += " AND data <= ?"; binds.push(ate); }
-    sql += " ORDER BY data DESC, hora_inicio DESC LIMIT 500";
+    if (usuario.role === "gestor_setor") { sql += " AND escalas.setor_id = ?"; binds.push(usuario.setor_id); }
+    else if (usuario.role === "usuario") { sql += " AND escalas.user_id = ?"; binds.push(usuario.id); }
+    else if (setorId) { sql += " AND escalas.setor_id = ?"; binds.push(Number(setorId)); }
+    if (userId) { sql += " AND escalas.user_id = ?"; binds.push(Number(userId)); }
+    if (de) { sql += " AND escalas.data >= ?"; binds.push(de); }
+    if (ate) { sql += " AND escalas.data <= ?"; binds.push(ate); }
+    sql += " ORDER BY escalas.data ASC, escalas.hora_inicio ASC LIMIT 3000";
     const { results } = await env.DB.prepare(sql).bind(...binds).all();
     return json({ escalas: results });
   }

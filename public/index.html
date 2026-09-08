@@ -102,6 +102,20 @@
   .chip-dia.desconhecido { background: #7f1d1d55; color: #fca5a5; }
   .chip-dia button { background: transparent; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 13px; line-height: 1; }
 
+  .tabela-funcao-dia { border-collapse: collapse; font-size: 11.5px; white-space: nowrap; }
+  .tabela-funcao-dia th, .tabela-funcao-dia td { border: 1px solid #334155; padding: 5px 8px; text-align: center; }
+  .tabela-funcao-dia th.col-funcao, .tabela-funcao-dia td.col-funcao { text-align: left; white-space: normal; max-width: 220px; font-weight: 600; }
+  .tabela-funcao-dia thead th { background: #1e293b; color: #94a3b8; }
+  .wrapper-tabela-escala { overflow-x: auto; border: 1px solid #334155; border-radius: 8px; }
+
+  @media print {
+    body * { visibility: hidden; }
+    #area-imprimir-escala, #area-imprimir-escala * { visibility: visible; }
+    #area-imprimir-escala { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+    .tabela-funcao-dia th, .tabela-funcao-dia td { border-color: #999; color: #000; }
+    .tabela-funcao-dia thead th { background: #eee; color: #000; }
+  }
+
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #293548; }
   th { color: #94a3b8; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
@@ -275,6 +289,7 @@ async function renderShell() {
       <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Imagem</button>
       <button class="aba ${telaAtual === "excel" ? "ativa" : ""}" data-aba="excel">Importar Excel</button>
       <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
+      <button class="aba ${telaAtual === "visualizar" ? "ativa" : ""}" data-aba="visualizar">Visualizar Escala</button>
       ${souAdmin ? `<button class="aba ${telaAtual === "config" ? "ativa" : ""}" data-aba="config">Configurações</button>` : ""}
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
@@ -288,6 +303,7 @@ async function renderShell() {
     if (telaAtual === "importar") await renderImportarEscala();
     else if (telaAtual === "excel") await renderImportarExcel();
     else if (telaAtual === "gerar") await renderGerarEscala();
+    else if (telaAtual === "visualizar") await renderVisualizarEscala();
     else if (telaAtual === "config" && souAdmin) await renderConfiguracoes();
     else await renderFuncionarios();
   } else {
@@ -1809,6 +1825,107 @@ async function renderCodigosPlantao() {
       fb.innerHTML = `<div class="msg erro">${e.message}</div>`;
     }
   };
+}
+
+/* ---------- Visualizar / Imprimir Escala (função x dia = nome) ---------- */
+async function renderVisualizarEscala() {
+  const conteudo = document.getElementById("conteudo");
+  if (!listaUsuarios.length) {
+    try { await carregarDados(); } catch (e) {
+      conteudo.innerHTML = `<div class="msg erro">Erro ao carregar dados: ${e.message}</div>`;
+      return;
+    }
+  }
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  const hoje = new Date();
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Visualizar Escala</h2></div>
+    <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+      ${!souGestorSetor ? `
+      <div>
+        <label>Setor</label>
+        <select id="v-setor" style="max-width:220px">
+          ${listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("")}
+        </select>
+      </div>` : ""}
+      <div>
+        <label>Mês</label>
+        <input type="month" id="v-mes" value="${mesAtual}" style="max-width:160px" />
+      </div>
+      <div><button id="v-carregar">Carregar</button></div>
+      <div id="v-btn-imprimir-wrap"></div>
+    </div>
+    <div id="v-resultado" style="margin-top:20px;"></div>
+  `;
+  document.getElementById("v-carregar").onclick = carregarVisualizacaoEscala;
+}
+
+async function carregarVisualizacaoEscala() {
+  const area = document.getElementById("v-resultado");
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  const setorId = souGestorSetor ? usuarioAtual.setorId : Number(document.getElementById("v-setor").value);
+  const mes = document.getElementById("v-mes").value;
+  if (!mes) { area.innerHTML = `<div class="msg erro">Escolha o mês.</div>`; return; }
+
+  const [ano, mesNum] = mes.split("-").map(Number);
+  const dataIni = `${mes}-01`;
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+  const dataFim = `${mes}-${String(ultimoDia).padStart(2, "0")}`;
+
+  area.innerHTML = `<div class="vazio">Carregando...</div>`;
+  let escalas;
+  try {
+    const r = await api(`/escalas?setorId=${setorId}&de=${dataIni}&ate=${dataFim}`);
+    escalas = r.escalas;
+  } catch (e) {
+    area.innerHTML = `<div class="msg erro">${e.message}</div>`;
+    return;
+  }
+
+  if (!escalas.length) {
+    area.innerHTML = `<div class="vazio">Nenhum lançamento encontrado nesse setor/mês.</div>`;
+    document.getElementById("v-btn-imprimir-wrap").innerHTML = "";
+    return;
+  }
+
+  // agrupa por funcao (campo "tipo", ou "Sem função definida" se vazio) x dia
+  const funcoes = [...new Set(escalas.map(e => e.tipo && e.tipo.trim() ? e.tipo.trim() : "Sem função definida"))].sort();
+  const nomeSetor = souGestorSetor ? (listaSetores.find(s => s.id === usuarioAtual.setorId)?.nome || "") : (listaSetores.find(s => s.id === setorId)?.nome || "");
+
+  const grade = {}; // funcao -> { dia -> [nomes] }
+  funcoes.forEach(f => { grade[f] = {}; });
+  escalas.forEach(e => {
+    const funcao = e.tipo && e.tipo.trim() ? e.tipo.trim() : "Sem função definida";
+    const dia = Number(e.data.slice(8, 10));
+    if (!grade[funcao][dia]) grade[funcao][dia] = [];
+    grade[funcao][dia].push(e.usuario_nome);
+  });
+
+  const dias = Array.from({ length: ultimoDia }, (_, i) => i + 1);
+
+  area.innerHTML = `
+    <div id="area-imprimir-escala">
+      <h3 style="margin:0 0 4px;">${appConfig.nome_instituicao || "Pro-Escala"} — ${nomeSetor}</h3>
+      <p style="margin:0 0 14px; color:#94a3b8; font-size:13px;">Escala de ${mes}</p>
+      <div class="wrapper-tabela-escala">
+        <table class="tabela-funcao-dia">
+          <thead><tr><th class="col-funcao">Função</th>${dias.map(d => `<th>${String(d).padStart(2, "0")}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${funcoes.map(f => `
+              <tr>
+                <td class="col-funcao">${f}</td>
+                ${dias.map(d => `<td>${(grade[f][d] || []).join(", ")}</td>`).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.getElementById("v-btn-imprimir-wrap").innerHTML = `<button id="v-imprimir">Imprimir / Exportar PDF</button>`;
+  document.getElementById("v-imprimir").onclick = () => window.print();
 }
 
 iniciar();
