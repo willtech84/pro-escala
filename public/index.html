@@ -109,11 +109,18 @@
   .wrapper-tabela-escala { overflow-x: auto; border: 1px solid #334155; border-radius: 8px; }
 
   @media print {
+    @page { size: A4 landscape; margin: 8mm; }
     body * { visibility: hidden; }
     #area-imprimir-escala, #area-imprimir-escala * { visibility: visible; }
     #area-imprimir-escala { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
-    .tabela-funcao-dia th, .tabela-funcao-dia td { border-color: #999; color: #000; }
+    #area-imprimir-escala h3 { font-size: 13px; margin: 0 0 2px; }
+    #area-imprimir-escala p { font-size: 9px; margin: 0 0 6px; }
+    .wrapper-tabela-escala { overflow: visible; border: none; }
+    .tabela-funcao-dia { font-size: 6.5px; width: 100%; table-layout: fixed; }
+    .tabela-funcao-dia th, .tabela-funcao-dia td { border-color: #999; color: #000; padding: 2px 1px; overflow: hidden; text-overflow: ellipsis; }
     .tabela-funcao-dia thead th { background: #eee; color: #000; }
+    .tabela-funcao-dia th.col-funcao, .tabela-funcao-dia td.col-funcao { max-width: none; width: 120px; font-size: 7px; white-space: normal; word-break: break-word; }
+    .tabela-funcao-dia tr { page-break-inside: avoid; }
   }
 
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
@@ -142,7 +149,6 @@
 <body>
 <div id="app"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const API = "/api";
@@ -286,7 +292,6 @@ async function renderShell() {
     ${podeGerenciarFuncionarios ? `
     <nav class="abas">
       <button class="aba ${telaAtual === "funcionarios" ? "ativa" : ""}" data-aba="funcionarios">Funcionários</button>
-      <button class="aba ${telaAtual === "importar" ? "ativa" : ""}" data-aba="importar">Importar Imagem</button>
       <button class="aba ${telaAtual === "excel" ? "ativa" : ""}" data-aba="excel">Importar Excel</button>
       <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
       <button class="aba ${telaAtual === "visualizar" ? "ativa" : ""}" data-aba="visualizar">Visualizar Escala</button>
@@ -300,8 +305,7 @@ async function renderShell() {
     document.querySelectorAll(".aba").forEach(b => {
       b.onclick = () => { telaAtual = b.dataset.aba; renderShell(); };
     });
-    if (telaAtual === "importar") await renderImportarEscala();
-    else if (telaAtual === "excel") await renderImportarExcel();
+    if (telaAtual === "excel") await renderImportarExcel();
     else if (telaAtual === "gerar") await renderGerarEscala();
     else if (telaAtual === "visualizar") await renderVisualizarEscala();
     else if (telaAtual === "config" && souAdmin) await renderConfiguracoes();
@@ -349,9 +353,11 @@ async function renderFuncionarios(filtro = "") {
       <div style="display:flex; gap:10px; align-items:center;">
         <input id="busca" placeholder="Buscar por nome ou e-mail" value="${filtro}" />
         ${podeCriarSetor ? `<button class="secundario" id="btn-novo-setor">+ Setor</button>` : ""}
+        <button class="secundario" id="btn-importar-func">Importar planilha</button>
         <button id="btn-novo-func">+ Funcionário</button>
       </div>
     </div>
+    <div id="area-importar-funcionarios"></div>
     <div class="linha-setores">
       <span class="linha-setores-label">Setores:</span>
       ${listaSetores.length === 0
@@ -361,12 +367,12 @@ async function renderFuncionarios(filtro = "") {
     <div id="feedback-setor"></div>
     ${filtrados.length === 0 ? `<div class="vazio">Nenhum funcionário encontrado.</div>` : `
     <table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Setor</th><th>Escala</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>Especialidade</th><th>Papel</th><th>Setor</th><th>Escala</th><th>Status</th><th></th></tr></thead>
       <tbody>
         ${filtrados.map(u => `
           <tr>
             <td>${u.nome}</td>
-            <td>${u.email}</td>
+            <td>${u.especialidade || "—"}</td>
             <td>${u.role}</td>
             <td>${setorNome(u.setorId)}</td>
             <td>${escalaNome(u.tipoEscalaId)}</td>
@@ -383,6 +389,7 @@ async function renderFuncionarios(filtro = "") {
 
   document.getElementById("busca").oninput = (e) => renderFuncionariosLocal(e.target.value);
   document.getElementById("btn-novo-func").onclick = () => abrirModalFuncionario(null);
+  document.getElementById("btn-importar-func").onclick = toggleImportarFuncionarios;
   const btnSetor = document.getElementById("btn-novo-setor");
   if (btnSetor) btnSetor.onclick = criarSetorPrompt;
 
@@ -416,7 +423,7 @@ function renderFuncionariosLocal(filtro) {
   tbody.innerHTML = filtrados.map(u => `
     <tr>
       <td>${u.nome}</td>
-      <td>${u.email}</td>
+      <td>${u.especialidade || "—"}</td>
       <td>${u.role}</td>
       <td>${setorNome(u.setorId)}</td>
       <td>${escalaNome(u.tipoEscalaId)}</td>
@@ -467,6 +474,10 @@ function abrirModalFuncionario(id) {
       <h3>${editando ? "Editar funcionário" : "Novo funcionário"}</h3>
       <label>Nome</label>
       <input id="m-nome" value="${editando ? editando.nome.replace(/"/g,'&quot;') : ""}" />
+      <label>Especialidade</label>
+      <input id="m-especialidade" value="${editando?.especialidade || ""}" placeholder="Ex: Anestesiologia" />
+      <label>CRM/Registro</label>
+      <input id="m-crm" value="${editando?.crm || ""}" placeholder="Ex: CRM 12345" />
       <label>E-mail</label>
       <input id="m-email" type="email" value="${editando ? editando.email : ""}" />
       ${!editando ? `<label>Senha</label><input id="m-senha" type="password" />` : `
@@ -525,7 +536,7 @@ async function salvarFuncionario(overlay, editando) {
     const tipoEscalaEl = document.getElementById("m-tipo-escala");
     const statusEl = document.getElementById("m-status");
 
-    const body = { nome, email };
+    const body = { nome, email, especialidade: document.getElementById("m-especialidade").value.trim(), crm: document.getElementById("m-crm").value.trim() };
     if (senha) body.senha = senha;
     if (roleEl) body.role = roleEl.value;
     if (setorEl) body.setorId = setorEl.value ? Number(setorEl.value) : null;
@@ -558,48 +569,214 @@ async function excluirFuncionario(id) {
   }
 }
 
-/* ---------- Importar Escala (imagem) ---------- */
-// Camada de provedores: hoje so' OCR gratuito. Quando a licenca for vendida/ativada,
-// troca PROVEDOR_ATIVO para "ia" e implementa extrairComIA (chamada a uma API de visao).
-// O resto da tela (revisao/edicao/importacao) nao muda.
-const PROVEDORES_IMPORTACAO = {
-  ocr: { rotulo: "OCR local (gratuito)", extrair: extrairComOCR },
-  ia: { rotulo: "IA com visão (em breve)", extrair: extrairComIA },
-};
-let PROVEDOR_ATIVO = "ocr";
+/* ---------- Importar planilha de funcionários (nome/especialidade/CRM, sem datas) ---------- */
+let funcImportLinhas = [];
+let funcImportCabecalhoIdx = 0;
+let funcImportMapeamento = {};
+let funcImportRegistros = [];
 
-let registrosRevisao = [];
-let textoOcrBruto = "";
-
-async function extrairComOCR(file, onProgress) {
-  if (typeof Tesseract === "undefined") throw new Error("Biblioteca de OCR não carregou. Verifique sua conexão e recarregue a página.");
-  const { data } = await Tesseract.recognize(file, "por", {
-    logger: (m) => { if (m.status === "recognizing text" && onProgress) onProgress(Math.round(m.progress * 100)); },
-  });
-  return data.text;
+function toggleImportarFuncionarios() {
+  const area = document.getElementById("area-importar-funcionarios");
+  if (area.dataset.aberto === "1") { area.innerHTML = ""; area.dataset.aberto = "0"; return; }
+  area.dataset.aberto = "1";
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  area.innerHTML = `
+    <div class="aviso-modo">Suba uma planilha com o nome dos funcionários (especialidade e CRM são opcionais). O sistema tenta identificar as colunas sozinho — sem se preocupar com datas ou horários aqui, isso é só o cadastro.</div>
+    <div class="dropzone" id="dropzone-func">
+      <div id="dropzone-func-texto">📋 Clique para escolher a planilha (.xlsx, .xls, .csv)</div>
+      <input type="file" id="input-func" accept=".xlsx,.xls,.csv" />
+    </div>
+    <div id="area-mapeamento-func"></div>
+    <div id="area-revisao-func"></div>
+  `;
+  const dz = document.getElementById("dropzone-func");
+  const input = document.getElementById("input-func");
+  dz.onclick = () => input.click();
+  input.onchange = () => { if (input.files[0]) processarArquivoFuncionarios(input.files[0]); };
 }
 
-async function extrairComIA() {
-  throw new Error("Importação por IA ainda não está ativada neste sistema.");
+function processarArquivoFuncionarios(file) {
+  const dzTexto = document.getElementById("dropzone-func-texto");
+  dzTexto.textContent = `Lendo "${file.name}"...`;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: "array" });
+      const aba = wb.Sheets[wb.SheetNames[0]];
+      funcImportLinhas = XLSX.utils.sheet_to_json(aba, { header: 1, raw: true, defval: "" });
+      if (!funcImportLinhas.length) throw new Error("Planilha vazia.");
+      funcImportCabecalhoIdx = detectarCabecalho(funcImportLinhas);
+      funcImportMapeamento = detectarMapeamento(funcImportLinhas[funcImportCabecalhoIdx]);
+      Object.keys(funcImportMapeamento).forEach(k => {
+        if (!["nome", "especialidade", "crm"].includes(funcImportMapeamento[k])) funcImportMapeamento[k] = "ignorar";
+      });
+      dzTexto.textContent = "📋 Clique para escolher outra planilha";
+      renderMapeamentoFuncionarios();
+    } catch (err) {
+      dzTexto.textContent = "📋 Clique para escolher a planilha (.xlsx, .xls, .csv)";
+      document.getElementById("area-mapeamento-func").innerHTML = `<div class="msg erro">Erro ao ler planilha: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
-// Parser ingenuo: tenta achar data (dd/mm/aaaa ou aaaa-mm-dd) e horarios (HH:MM) em cada linha.
-// O resto da linha vira o "nome detectado", que o usuario ajusta manualmente na tabela de revisao.
-// Extrai só os nomes de cada linha do texto OCR. Critério rígido de propósito: uma
-// linha só passa se TODAS as palavras forem puramente alfabéticas (nada de "1BAS17",
-// "07AI" etc — grade/código de turno sempre mistura letra com número) e o total de
-// palavras couber num nome de pessoa (1 a 3). Prefere descartar demais a deixar ruído.
-function linhasParaNomes(texto) {
-  return texto
-    .split("\n")
-    .map(l => l.trim())
-    .filter(Boolean)
-    .map(l => l.replace(/[|\[\]_]+/g, " ").replace(/\s+/g, " ").trim())
-    .filter(l => {
-      const palavras = l.split(" ").filter(Boolean);
-      if (!palavras.length || palavras.length > 3) return false;
-      return palavras.every(p => /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*$/.test(p) && p.length >= 2);
+function renderMapeamentoFuncionarios() {
+  const area = document.getElementById("area-mapeamento-func");
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  const linhaCab = funcImportLinhas[funcImportCabecalhoIdx];
+  const linhaAmostra = funcImportLinhas[funcImportCabecalhoIdx + 1] || [];
+  const opcoesCampo = [["ignorar", "Ignorar"], ["nome", "Nome"], ["especialidade", "Especialidade"], ["crm", "CRM/Registro"]];
+
+  area.innerHTML = `
+    <label>Linha do cabeçalho na planilha</label>
+    <select id="sel-linha-cab-func" style="max-width:200px">
+      ${funcImportLinhas.slice(0, 10).map((l, i) => `<option value="${i}" ${i === funcImportCabecalhoIdx ? "selected" : ""}>Linha ${i + 1}: ${l.slice(0, 3).join(" | ") || "(vazia)"}</option>`).join("")}
+    </select>
+    ${!souGestorSetor ? `
+    <label>Setor para os novos funcionários</label>
+    <select id="func-setor-padrao" style="max-width:220px">
+      <option value="">selecione</option>
+      ${listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("")}
+    </select>` : ""}
+    <div class="grade-mapeamento" id="func-cols">
+      ${linhaCab.map((celula, i) => `
+        <div class="col-mapeamento">
+          <div class="amostra"><strong>${celula || "(coluna " + (i + 1) + ")"}</strong><br/>ex: ${linhaAmostra[i] ?? ""}</div>
+          <select data-col="${i}">
+            ${opcoesCampo.map(([v, l]) => `<option value="${v}" ${funcImportMapeamento[i] === v ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+        </div>
+      `).join("")}
+    </div>
+    <button id="btn-processar-func">Processar planilha</button>
+  `;
+
+  document.getElementById("sel-linha-cab-func").onchange = (e) => {
+    funcImportCabecalhoIdx = Number(e.target.value);
+    funcImportMapeamento = detectarMapeamento(funcImportLinhas[funcImportCabecalhoIdx]);
+    Object.keys(funcImportMapeamento).forEach(k => {
+      if (!["nome", "especialidade", "crm"].includes(funcImportMapeamento[k])) funcImportMapeamento[k] = "ignorar";
     });
+    renderMapeamentoFuncionarios();
+  };
+  area.querySelectorAll("[data-col]").forEach(sel => {
+    sel.onchange = () => { funcImportMapeamento[Number(sel.dataset.col)] = sel.value; };
+  });
+  document.getElementById("btn-processar-func").onclick = processarLinhasFuncionarios;
+}
+
+function processarLinhasFuncionarios() {
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
+  const colNome = Object.keys(funcImportMapeamento).find(k => funcImportMapeamento[k] === "nome");
+  const colEsp = Object.keys(funcImportMapeamento).find(k => funcImportMapeamento[k] === "especialidade");
+  const colCrm = Object.keys(funcImportMapeamento).find(k => funcImportMapeamento[k] === "crm");
+  const setorPadraoEl = document.getElementById("func-setor-padrao");
+  const setorPadrao = souGestorSetor ? usuarioAtual.setorId : (setorPadraoEl ? Number(setorPadraoEl.value) : "");
+
+  if (colNome === undefined) {
+    document.getElementById("area-revisao-func").innerHTML = `<div class="msg erro">Marque ao menos uma coluna como "Nome".</div>`;
+    return;
+  }
+
+  const linhasDados = funcImportLinhas.slice(funcImportCabecalhoIdx + 1);
+  funcImportRegistros = linhasDados
+    .map(l => ({
+      nomeDetectado: String(l[colNome] ?? "").trim(),
+      especialidade: colEsp !== undefined ? String(l[colEsp] ?? "").trim() : "",
+      crm: colCrm !== undefined ? String(l[colCrm] ?? "").trim() : "",
+    }))
+    .filter(r => r.nomeDetectado)
+    .map(r => ({ ...r, usuarioId: encontrarUsuarioPorNome(r.nomeDetectado), setorId: setorPadrao }));
+
+  renderRevisaoFuncionarios();
+}
+
+function renderRevisaoFuncionarios() {
+  const area = document.getElementById("area-revisao-func");
+  if (!funcImportRegistros.length) {
+    area.innerHTML = `<div class="vazio">Nenhuma linha com nome válido encontrada.</div>`;
+    return;
+  }
+  const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
+
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:20px;">
+      <h2 style="font-size:16px;">Revisar antes de importar (${funcImportRegistros.length})</h2>
+    </div>
+    <table class="tabela-revisao">
+      <thead><tr><th>Detectado</th><th>Especialidade</th><th>CRM</th><th>Vincular a</th><th></th></tr></thead>
+      <tbody id="tbody-revisao-func"></tbody>
+    </table>
+    <div id="feedback-import-func" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="btn-importar-func-confirmar">Importar</button></div>
+  `;
+  const tbody = document.getElementById("tbody-revisao-func");
+  funcImportRegistros.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.nomeDetectado}</td>
+      <td><input data-campo="especialidade" data-i="${i}" value="${r.especialidade}" style="width:100%" /></td>
+      <td><input data-campo="crm" data-i="${i}" value="${r.crm}" style="width:100%" /></td>
+      <td>
+        <select data-campo="usuarioId" data-i="${i}">
+          <option value="">— criar novo —</option>
+          ${opcoesUsuarios}
+        </select>
+      </td>
+      <td><button class="perigo" data-remover="${i}">×</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector(`[data-campo="usuarioId"]`).value = r.usuarioId || "";
+  });
+  tbody.querySelectorAll("[data-campo]").forEach(el => {
+    el.onchange = () => { funcImportRegistros[Number(el.dataset.i)][el.dataset.campo] = el.value; };
+  });
+  tbody.querySelectorAll("[data-remover]").forEach(b => {
+    b.onclick = () => { funcImportRegistros.splice(Number(b.dataset.remover), 1); renderRevisaoFuncionarios(); };
+  });
+  document.getElementById("btn-importar-func-confirmar").onclick = confirmarImportacaoFuncionarios;
+}
+
+async function confirmarImportacaoFuncionarios() {
+  const btn = document.getElementById("btn-importar-func-confirmar");
+  const fb = document.getElementById("feedback-import-func");
+  btn.disabled = true;
+  fb.innerHTML = "";
+
+  const semSetorId = funcImportRegistros.some(r => !r.usuarioId && !r.setorId);
+  if (semSetorId) {
+    fb.innerHTML = `<div class="msg erro">Escolha o setor pra novos funcionários antes de importar (campo acima da planilha).</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  let criados = 0, atualizados = 0;
+  const falhas = [];
+  for (const r of funcImportRegistros) {
+    try {
+      if (r.usuarioId) {
+        await api(`/usuarios/${r.usuarioId}`, { method: "PUT", body: JSON.stringify({ especialidade: r.especialidade, crm: r.crm }) });
+        atualizados++;
+      } else {
+        await api("/usuarios", { method: "POST", body: JSON.stringify({
+          nome: r.nomeDetectado, email: gerarEmailTemp(r.nomeDetectado), senha: gerarSenhaTemp(),
+          role: "usuario", setorId: Number(r.setorId), especialidade: r.especialidade, crm: r.crm,
+        }) });
+        criados++;
+      }
+    } catch (e) {
+      falhas.push(`${r.nomeDetectado}: ${e.message}`);
+    }
+  }
+
+  let html = "";
+  if (criados) html += `<div class="msg ok">${criados} funcionário(s) novo(s) criado(s).</div>`;
+  if (atualizados) html += `<div class="msg ok">${atualizados} cadastro(s) atualizado(s).</div>`;
+  if (falhas.length) html += `<div class="msg erro">${falhas.length} falha(s): ${falhas.join(", ")}</div>`;
+  fb.innerHTML = html;
+  btn.disabled = false;
+  await carregarDados();
+  setTimeout(() => renderFuncionarios(), 1500);
 }
 
 function encontrarUsuarioPorNome(nomeDetectado) {
@@ -621,199 +798,6 @@ function gerarSenhaTemp() {
   return Math.random().toString(36).slice(2, 10) + "Aa1!";
 }
 
-async function renderImportarEscala() {
-  const conteudo = document.getElementById("conteudo");
-  if (!listaUsuarios.length) {
-    try { await carregarDados(); } catch (e) {
-      conteudo.innerHTML = `<div class="msg erro">Erro ao carregar funcionários: ${e.message}</div>`;
-      return;
-    }
-  }
-
-  conteudo.innerHTML = `
-    <div class="cabecalho-lista"><h2>Importar Escala por Imagem</h2></div>
-    <div class="aviso-modo">
-      Modo atual: <strong>${PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].rotulo}</strong> — a leitura fica só na coluna de nomes
-      (horário de grade em foto costuma vir embaralhado). Depois de reconhecer os nomes, você vincula cada um a um
-      funcionário e define o padrão de escala dele. Os horários da semana são gerados a partir desse padrão.
-    </div>
-    <div class="dropzone" id="dropzone">
-      <div id="dropzone-texto">📷 Clique para escolher uma foto ou print da escala (JPG, PNG)</div>
-      <input type="file" id="input-imagem" accept="image/*" />
-    </div>
-    <div id="area-progresso"></div>
-    <div id="area-texto-bruto"></div>
-    <div id="area-revisao"></div>
-  `;
-
-  const dropzone = document.getElementById("dropzone");
-  const inputImagem = document.getElementById("input-imagem");
-  dropzone.onclick = () => inputImagem.click();
-  inputImagem.onchange = () => { if (inputImagem.files[0]) processarImagem(inputImagem.files[0]); };
-}
-
-async function processarImagem(file) {
-  const areaProgresso = document.getElementById("area-progresso");
-  const dzTexto = document.getElementById("dropzone-texto");
-  dzTexto.textContent = `Processando "${file.name}"...`;
-  areaProgresso.innerHTML = `<div class="progresso-ocr"><div class="progresso-ocr-barra" id="barra-progresso" style="width:0%"></div></div>`;
-
-  try {
-    const texto = await PROVEDORES_IMPORTACAO[PROVEDOR_ATIVO].extrair(file, (pct) => {
-      const barra = document.getElementById("barra-progresso");
-      if (barra) barra.style.width = pct + "%";
-    });
-    textoOcrBruto = texto;
-    dzTexto.textContent = "📷 Clique para escolher outra imagem";
-    areaProgresso.innerHTML = "";
-    renderTextoBruto();
-  } catch (e) {
-    dzTexto.textContent = "📷 Clique para escolher uma foto ou print da escala (JPG, PNG)";
-    areaProgresso.innerHTML = `<div class="msg erro">${e.message}</div>`;
-  }
-}
-
-function renderTextoBruto() {
-  const area = document.getElementById("area-texto-bruto");
-  area.innerHTML = `
-    <label>Texto lido da imagem (revise antes de extrair — cada nome precisa estar em uma linha própria; separe nomes que vieram colados na mesma linha, apague o resto)</label>
-    <textarea class="texto-ocr" id="texto-ocr">${textoOcrBruto}</textarea>
-    <div style="margin-top:10px;"><button id="btn-gerar-linhas">Extrair nomes</button></div>
-  `;
-  document.getElementById("btn-gerar-linhas").onclick = () => {
-    const texto = document.getElementById("texto-ocr").value;
-    const nomes = linhasParaNomes(texto);
-    registrosRevisao = nomes.map(n => ({
-      nomeDetectado: n,
-      usuarioId: encontrarUsuarioPorNome(n),
-      setorId: usuarioAtual.role === "gestor_setor" ? usuarioAtual.setorId : (listaSetores[0]?.id || ""),
-      tipoEscalaId: "",
-    }));
-    if (!registrosRevisao.length) registrosRevisao = [{ nomeDetectado: "", usuarioId: "", setorId: "", tipoEscalaId: "" }];
-    renderTabelaRevisao();
-  };
-}
-
-function renderTabelaRevisao() {
-  const area = document.getElementById("area-revisao");
-  const souGestorSetor = usuarioAtual.role === "gestor_setor";
-  const opcoesUsuarios = (r) => {
-    const jaEscolhidos = registrosRevisao.filter(x => x !== r).map(x => x.usuarioId).filter(Boolean);
-    return listaUsuarios
-      .filter(u => !jaEscolhidos.includes(u.id))
-      .map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
-  };
-  const opcoesSetores = listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
-  const opcoesTiposEscala = listaTiposEscala.map(t => `<option value="${t.id}">${t.nome}</option>`).join("");
-
-  area.innerHTML = `
-    <div class="cabecalho-lista" style="margin-top:24px;">
-      <h2 style="font-size:16px;">Revisar antes de importar (${registrosRevisao.length} nomes)</h2>
-      <button class="secundario" id="btn-add-linha">+ Linha</button>
-    </div>
-    <table class="tabela-revisao">
-      <thead><tr><th>Detectado</th><th>Vincular a</th><th>Setor (se novo)</th><th>Padrão de escala</th><th></th></tr></thead>
-      <tbody id="tbody-revisao"></tbody>
-    </table>
-    <div id="feedback-import" style="margin-top:14px;"></div>
-    <div style="margin-top:14px;"><button id="btn-importar">Confirmar funcionários</button></div>
-  `;
-
-  const tbody = document.getElementById("tbody-revisao");
-  registrosRevisao.forEach((r, i) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${r.nomeDetectado || "—"}</td>
-      <td>
-        <select data-campo="usuarioId" data-i="${i}">
-          <option value="">— criar novo funcionário —</option>
-          ${opcoesUsuarios(r)}
-        </select>
-      </td>
-      <td>
-        <select data-campo="setorId" data-i="${i}" ${souGestorSetor ? "disabled" : ""} style="${r.usuarioId ? "visibility:hidden" : ""}">
-          <option value="">selecione</option>
-          ${opcoesSetores}
-        </select>
-      </td>
-      <td>
-        <select data-campo="tipoEscalaId" data-i="${i}">
-          <option value="">— não definido —</option>
-          ${opcoesTiposEscala}
-        </select>
-      </td>
-      <td><button class="perigo" data-remover="${i}">×</button></td>
-    `;
-    tbody.appendChild(tr);
-    tr.querySelector(`select[data-campo="usuarioId"]`).value = r.usuarioId || "";
-    tr.querySelector(`select[data-campo="setorId"]`).value = r.setorId || "";
-    tr.querySelector(`select[data-campo="tipoEscalaId"]`).value = r.tipoEscalaId || "";
-  });
-
-  tbody.querySelectorAll("[data-campo]").forEach(el => {
-    el.onchange = () => {
-      registrosRevisao[Number(el.dataset.i)][el.dataset.campo] = el.value;
-      if (el.dataset.campo === "usuarioId") renderTabelaRevisao(); // re-render p/ atualizar opcoes disponiveis e visibilidade do setor
-    };
-  });
-  tbody.querySelectorAll("[data-remover]").forEach(b => {
-    b.onclick = () => { registrosRevisao.splice(Number(b.dataset.remover), 1); renderTabelaRevisao(); };
-  });
-  document.getElementById("btn-add-linha").onclick = () => {
-    registrosRevisao.push({ nomeDetectado: "", usuarioId: "", setorId: souGestorSetor ? usuarioAtual.setorId : "", tipoEscalaId: "" });
-    renderTabelaRevisao();
-  };
-  document.getElementById("btn-importar").onclick = confirmarImportacao;
-}
-
-async function confirmarImportacao() {
-  const btn = document.getElementById("btn-importar");
-  const fb = document.getElementById("feedback-import");
-  btn.disabled = true;
-  fb.innerHTML = "";
-
-  const validos = registrosRevisao.filter(r => r.nomeDetectado && (r.usuarioId || r.setorId));
-  if (!validos.length) {
-    fb.innerHTML = `<div class="msg erro">Preencha ao menos um nome com funcionário ou setor definido.</div>`;
-    btn.disabled = false;
-    return;
-  }
-
-  let criados = 0, atualizados = 0;
-  const falhas = [];
-
-  for (const r of validos) {
-    try {
-      if (r.usuarioId) {
-        if (r.tipoEscalaId) {
-          await api(`/usuarios/${r.usuarioId}`, { method: "PUT", body: JSON.stringify({ tipoEscalaId: Number(r.tipoEscalaId) }) });
-          atualizados++;
-        }
-      } else {
-        await api("/usuarios", { method: "POST", body: JSON.stringify({
-          nome: r.nomeDetectado,
-          email: gerarEmailTemp(r.nomeDetectado),
-          senha: gerarSenhaTemp(),
-          role: "usuario",
-          setorId: Number(r.setorId),
-          tipoEscalaId: r.tipoEscalaId ? Number(r.tipoEscalaId) : null,
-        }) });
-        criados++;
-      }
-    } catch (e) {
-      falhas.push(`${r.nomeDetectado}: ${e.message}`);
-    }
-  }
-
-  let html = "";
-  if (criados) html += `<div class="msg ok">${criados} funcionário(s) novo(s) criado(s).</div>`;
-  if (atualizados) html += `<div class="msg ok">${atualizados} padrão(ões) de escala atualizado(s).</div>`;
-  if (falhas.length) html += `<div class="msg erro">${falhas.length} falha(s): ${falhas.join(", ")}</div>`;
-  fb.innerHTML = html;
-  btn.disabled = false;
-
-  await carregarDados();
-}
 
 /* ---------- Gerar Escala a partir do padrão ---------- */
 // Cada modelo de padrao tem uma logica de distribuicao diferente. Isso e' uma SUGESTAO --
@@ -1458,6 +1442,59 @@ function processarLinhasGrade() {
   renderRevisaoGrade();
 }
 
+function renderPainelCodigosDesconhecidos(codigos) {
+  const area = document.getElementById("area-codigos-desconhecidos");
+  area.innerHTML = `
+    <div class="msg erro" style="margin-bottom:10px;">
+      ${codigos.length} código(s) não estão no dicionário ainda. Cadastre o significado abaixo pra já entrar certo na importação (ou deixe em branco e ajuste depois em Configurações).
+    </div>
+    <table class="tabela-revisao" style="margin-bottom:16px;">
+      <thead><tr><th>Código</th><th>Descrição</th><th>Início</th><th>Fim</th><th></th></tr></thead>
+      <tbody>
+        ${codigos.map(c => `
+          <tr>
+            <td><strong>${c}</strong></td>
+            <td><input data-desc="${c}" placeholder="O que esse código significa?" style="width:100%" /></td>
+            <td><input data-inicio="${c}" placeholder="HH:MM (opcional)" style="width:100px" /></td>
+            <td><input data-fim="${c}" placeholder="HH:MM (opcional)" style="width:100px" /></td>
+            <td><button class="secundario" data-cadastrar="${c}">Cadastrar</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+  area.querySelectorAll("[data-cadastrar]").forEach(btn => {
+    btn.onclick = async () => {
+      const codigo = btn.dataset.cadastrar;
+      const descricao = area.querySelector(`[data-desc="${codigo}"]`).value.trim();
+      const horaInicio = area.querySelector(`[data-inicio="${codigo}"]`).value.trim();
+      const horaFim = area.querySelector(`[data-fim="${codigo}"]`).value.trim();
+      if (!descricao) { alert("Preencha ao menos a descrição."); return; }
+      btn.disabled = true;
+      try {
+        await api("/codigos-plantao", { method: "POST", body: JSON.stringify({ sigla: codigo, descricao, horaInicio: horaInicio || null, horaFim: horaFim || null }) });
+        const r = await api("/codigos-plantao");
+        listaCodigosPlantao = r.codigos;
+        // atualiza so' as entradas com esse codigo, preservando qualquer edicao manual ja feita na revisao
+        gruposGrade.forEach(g => {
+          g.entradas.forEach(e => {
+            if (e.codigo.toUpperCase().replace(/°/g, "º") === codigo.toUpperCase().replace(/°/g, "º")) {
+              e.tipo = `${e.codigo} — ${descricao}`;
+              e.horaInicio = horaInicio || "00:00";
+              e.horaFim = horaFim || "23:59";
+              e.desconhecido = false;
+            }
+          });
+        });
+        renderRevisaoGrade();
+      } catch (e) {
+        alert("Erro ao cadastrar: " + e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 function renderRevisaoGrade() {
   const area = document.getElementById("area-revisao-excel");
   if (!gruposGrade.length) {
@@ -1465,7 +1502,7 @@ function renderRevisaoGrade() {
     return;
   }
   const totalLancamentos = gruposGrade.reduce((s, g) => s + g.entradas.length, 0);
-  const totalDesconhecidos = gruposGrade.reduce((s, g) => s + g.entradas.filter(e => e.desconhecido).length, 0);
+  const codigosDesconhecidos = [...new Set(gruposGrade.flatMap(g => g.entradas.filter(e => e.desconhecido).map(e => e.codigo)))];
   const opcoesUsuarios = listaUsuarios.map(u => `<option value="${u.id}">${u.nome}</option>`).join("");
   const opcoesSetores = listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
 
@@ -1473,11 +1510,13 @@ function renderRevisaoGrade() {
     <div class="cabecalho-lista" style="margin-top:24px;">
       <h2 style="font-size:16px;">Revisar antes de importar (${gruposGrade.length} médicos, ${totalLancamentos} lançamentos)</h2>
     </div>
-    ${totalDesconhecidos ? `<div class="msg erro">${totalDesconhecidos} lançamento(s) com código não cadastrado no dicionário — foram importados com o código literal, sem horário definido. Cadastre o significado em Configurações → Códigos de Plantão.</div>` : ""}
+    <div id="area-codigos-desconhecidos"></div>
     <div id="grupos-grade"></div>
     <div id="feedback-import-excel" style="margin-top:14px;"></div>
     <div style="margin-top:14px;"><button id="btn-importar-grade">Importar tudo</button></div>
   `;
+
+  if (codigosDesconhecidos.length) renderPainelCodigosDesconhecidos(codigosDesconhecidos);
 
   const cont = document.getElementById("grupos-grade");
   gruposGrade.forEach((g, gi) => {

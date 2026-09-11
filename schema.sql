@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK (role IN ('admin', 'rh', 'gestor_setor', 'usuario')),
     setor_id INTEGER REFERENCES setores(id),
     tipo_escala_id INTEGER REFERENCES tipos_escala(id),
+    especialidade TEXT,
+    crm TEXT,
     status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'bloqueado')),
     criado_em TEXT DEFAULT (datetime('now'))
 );

@@ -55,6 +55,8 @@ function semSenha(u) {
     role: u.role,
     setorId: u.setor_id,
     tipoEscalaId: u.tipo_escala_id,
+    especialidade: u.especialidade,
+    crm: u.crm,
     status: u.status,
     criadoEm: u.criado_em,
   };
@@ -145,7 +147,7 @@ async function handleApi(req, env, url) {
 
   // GET /usuarios — admin ve todos; rh ve todos; gestor_setor ve so do proprio setor
   if (path === "/usuarios" && method === "GET") {
-    let query = "SELECT id, nome, email, role, setor_id, tipo_escala_id, status, criado_em FROM users";
+    let query = "SELECT id, nome, email, role, setor_id, tipo_escala_id, especialidade, crm, status, criado_em FROM users";
     let stmt;
     if (usuario.role === "gestor_setor") {
       stmt = env.DB.prepare(query + " WHERE setor_id = ? ORDER BY nome").bind(usuario.setor_id);
@@ -183,8 +185,8 @@ async function handleApi(req, env, url) {
     const salt = randomHex();
     const hash = await hashSenha(senha, salt);
     const res = await env.DB.prepare(
-      "INSERT INTO users (nome, email, senha_hash, senha_salt, role, setor_id, status) VALUES (?,?,?,?,?,?,?)"
-    ).bind(nome, email, hash, salt, role, setorId, "ativo").run();
+      "INSERT INTO users (nome, email, senha_hash, senha_salt, role, setor_id, especialidade, crm, tipo_escala_id, status) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).bind(nome, email, hash, salt, role, setorId, (body.especialidade || "").trim() || null, (body.crm || "").trim() || null, body.tipoEscalaId || null, "ativo").run();
 
     const novo = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(res.meta.last_row_id).first();
     return json({ usuario: semSenha(novo) });
@@ -212,6 +214,8 @@ async function handleApi(req, env, url) {
     if (typeof body.email === "string" && body.email.trim()) { campos.push("email = ?"); valores.push(body.email.trim().toLowerCase()); }
     if (typeof body.status === "string" && ["ativo", "bloqueado"].includes(body.status)) { campos.push("status = ?"); valores.push(body.status); }
     if (body.tipoEscalaId !== undefined) { campos.push("tipo_escala_id = ?"); valores.push(body.tipoEscalaId || null); }
+    if (typeof body.especialidade === "string") { campos.push("especialidade = ?"); valores.push(body.especialidade.trim() || null); }
+    if (typeof body.crm === "string") { campos.push("crm = ?"); valores.push(body.crm.trim() || null); }
     if (usuario.role === "admin") {
       if (typeof body.role === "string" && ROLES.includes(body.role)) { campos.push("role = ?"); valores.push(body.role); }
       if (body.setorId !== undefined) { campos.push("setor_id = ?"); valores.push(body.setorId); }
