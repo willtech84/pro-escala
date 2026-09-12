@@ -241,6 +241,12 @@ async function handleApi(req, env, url) {
     if (usuario.role !== "admin") return erro("Apenas admin pode excluir usuarios.", 403);
     const id = Number(mDel[1]);
     if (id === usuario.id) return erro("Voce nao pode excluir a si mesmo.");
+    // remove dependencias antes (FK sem cascade): sessoes e escalas do proprio usuario,
+    // e desvincula (sem apagar) registros onde ele so' aparece como autor/auditoria
+    await env.DB.prepare("DELETE FROM sessoes WHERE usuario_id = ?").bind(id).run();
+    await env.DB.prepare("DELETE FROM escalas WHERE user_id = ?").bind(id).run();
+    await env.DB.prepare("UPDATE escalas SET criado_por = NULL WHERE criado_por = ?").bind(id).run();
+    await env.DB.prepare("UPDATE config_app SET atualizado_por = NULL WHERE atualizado_por = ?").bind(id).run();
     await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
     return json({ ok: true });
   }

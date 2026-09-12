@@ -66,6 +66,23 @@
   nav.abas .aba:hover { background: #24324a; color: #e2e8f0; }
   nav.abas .aba.ativa { color: var(--cor-primaria-clara); border-bottom-color: var(--cor-primaria-clara); }
 
+  nav.breadcrumb { display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: #1e293b; border-bottom: 1px solid #334155; }
+  nav.breadcrumb button { background: transparent; color: var(--cor-primaria-clara); padding: 4px 8px; font-size: 13.5px; font-weight: 600; }
+  nav.breadcrumb button:hover { background: #24324a; }
+  nav.breadcrumb .breadcrumb-atual { color: #94a3b8; font-size: 13.5px; }
+
+  .grade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-top: 8px; }
+  .card-painel {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 22px 18px;
+    cursor: pointer; transition: border-color .15s, transform .1s;
+  }
+  .card-painel:hover { border-color: var(--cor-primaria); transform: translateY(-2px); }
+  .card-painel.desabilitado { opacity: .5; cursor: not-allowed; }
+  .card-painel.desabilitado:hover { border-color: #334155; transform: none; }
+  .card-painel-icone { font-size: 28px; margin-bottom: 10px; }
+  .card-painel-titulo { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .card-painel-desc { font-size: 12px; color: #94a3b8; }
+
   .dropzone {
     border: 2px dashed #334155; border-radius: 10px; padding: 32px; text-align: center;
     color: #94a3b8; cursor: pointer; margin-bottom: 18px;
@@ -271,7 +288,7 @@ async function sair() {
 }
 
 /* ---------- Shell logado ---------- */
-let telaAtual = "funcionarios";
+let telaAtual = "dashboard";
 
 async function renderShell() {
   const podeGerenciarFuncionarios = ["admin", "rh", "gestor_setor"].includes(usuarioAtual.role);
@@ -289,32 +306,129 @@ async function renderShell() {
         <button class="secundario" id="sair">Sair</button>
       </div>
     </header>
-    ${podeGerenciarFuncionarios ? `
-    <nav class="abas">
-      <button class="aba ${telaAtual === "funcionarios" ? "ativa" : ""}" data-aba="funcionarios">Funcionários</button>
-      <button class="aba ${telaAtual === "excel" ? "ativa" : ""}" data-aba="excel">Importar Excel</button>
-      <button class="aba ${telaAtual === "gerar" ? "ativa" : ""}" data-aba="gerar">Gerar Escala</button>
-      <button class="aba ${telaAtual === "visualizar" ? "ativa" : ""}" data-aba="visualizar">Visualizar Escala</button>
-      ${souAdmin ? `<button class="aba ${telaAtual === "config" ? "ativa" : ""}" data-aba="config">Configurações</button>` : ""}
+    ${podeGerenciarFuncionarios && telaAtual !== "dashboard" ? `
+    <nav class="breadcrumb">
+      <button id="btn-painel">← Painel</button>
+      <span class="breadcrumb-atual">${ROTULOS_TELA[telaAtual] || ""}</span>
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
   `;
   document.getElementById("sair").onclick = sair;
+  const btnPainel = document.getElementById("btn-painel");
+  if (btnPainel) btnPainel.onclick = () => { telaAtual = "dashboard"; renderShell(); };
 
-  if (podeGerenciarFuncionarios) {
-    document.querySelectorAll(".aba").forEach(b => {
-      b.onclick = () => { telaAtual = b.dataset.aba; renderShell(); };
-    });
-    if (telaAtual === "excel") await renderImportarExcel();
-    else if (telaAtual === "gerar") await renderGerarEscala();
-    else if (telaAtual === "visualizar") await renderVisualizarEscala();
-    else if (telaAtual === "config" && souAdmin) await renderConfiguracoes();
-    else await renderFuncionarios();
-  } else {
+  if (!podeGerenciarFuncionarios) {
     document.getElementById("conteudo").innerHTML = `
       <div class="vazio">Você está logado como <strong>${usuarioAtual.role}</strong>. Ainda não há uma tela específica para o seu perfil — em breve.</div>
     `;
+    return;
   }
+
+  if (telaAtual === "dashboard") await renderDashboard();
+  else if (telaAtual === "menu-setores") await renderMenuSetores();
+  else if (telaAtual === "menu-cadastros") renderMenuCadastros();
+  else if (telaAtual === "menu-escalas") renderMenuEscalas();
+  else if (telaAtual === "avisos") renderAvisosPlaceholder();
+  else if (telaAtual === "funcionarios") await renderFuncionarios();
+  else if (telaAtual === "excel") await renderImportarExcel();
+  else if (telaAtual === "gerar") await renderGerarEscala();
+  else if (telaAtual === "visualizar") await renderVisualizarEscala();
+  else if (telaAtual === "config" && souAdmin) await renderConfiguracoes();
+  else await renderFuncionarios();
+}
+
+const ROTULOS_TELA = {
+  "menu-setores": "Setores", "menu-cadastros": "Cadastros", "menu-escalas": "Escalas",
+  avisos: "Avisos e Lembretes", funcionarios: "Funcionários", excel: "Importar Excel",
+  gerar: "Gerar Escala", visualizar: "Visualizar Escala", config: "Configurações",
+};
+
+function irPara(tela) { telaAtual = tela; renderShell(); }
+
+async function renderDashboard() {
+  const souAdmin = usuarioAtual.role === "admin";
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Painel</h2></div>
+    <div class="grade-cards">
+      <div class="card-painel" data-ir="menu-setores">
+        <div class="card-painel-icone">🏢</div>
+        <div class="card-painel-titulo">Setores</div>
+        <div class="card-painel-desc">Ver e entrar em cada setor</div>
+      </div>
+      <div class="card-painel" data-ir="menu-cadastros">
+        <div class="card-painel-icone">📇</div>
+        <div class="card-painel-titulo">Cadastros</div>
+        <div class="card-painel-desc">Funcionários, setores, legendas</div>
+      </div>
+      <div class="card-painel" data-ir="menu-escalas">
+        <div class="card-painel-icone">🗓️</div>
+        <div class="card-painel-titulo">Escalas</div>
+        <div class="card-painel-desc">Importar, gerar e visualizar</div>
+      </div>
+      ${souAdmin ? `
+      <div class="card-painel" data-ir="config">
+        <div class="card-painel-icone">⚙️</div>
+        <div class="card-painel-titulo">Configurações</div>
+        <div class="card-painel-desc">Marca, cores, códigos de plantão</div>
+      </div>` : ""}
+      <div class="card-painel" data-ir="avisos">
+        <div class="card-painel-icone">🔔</div>
+        <div class="card-painel-titulo">Avisos e Lembretes</div>
+        <div class="card-painel-desc">Em breve</div>
+      </div>
+    </div>
+  `;
+  conteudo.querySelectorAll("[data-ir]").forEach(c => { c.onclick = () => irPara(c.dataset.ir); });
+}
+
+async function renderMenuSetores() {
+  const conteudo = document.getElementById("conteudo");
+  if (!listaSetores.length) { try { await carregarDados(); } catch {} }
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Setores</h2></div>
+    <div class="grade-cards">
+      <div class="card-painel" data-ir="funcionarios"><div class="card-painel-icone">🏢</div><div class="card-painel-titulo">Todos os setores</div></div>
+      ${listaSetores.map(s => `<div class="card-painel" data-ir="funcionarios"><div class="card-painel-icone">🏢</div><div class="card-painel-titulo">${s.nome}</div></div>`).join("")}
+    </div>
+    <p class="grupo-grade-info" style="margin-top:14px;">Por enquanto, escolher um setor te leva pra tela de Funcionários — o filtro automático por setor vem numa próxima etapa.</p>
+  `;
+  conteudo.querySelectorAll("[data-ir]").forEach(c => { c.onclick = () => irPara(c.dataset.ir); });
+}
+
+function renderMenuCadastros() {
+  const conteudo = document.getElementById("conteudo");
+  const souAdmin = usuarioAtual.role === "admin";
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Cadastros</h2></div>
+    <div class="grade-cards">
+      <div class="card-painel" data-ir="funcionarios"><div class="card-painel-icone">👤</div><div class="card-painel-titulo">Funcionários</div><div class="card-painel-desc">Criar, editar, importar planilha</div></div>
+      <div class="card-painel" data-ir="funcionarios"><div class="card-painel-icone">🏢</div><div class="card-painel-titulo">Setores</div><div class="card-painel-desc">Criar setor (botão dentro de Funcionários)</div></div>
+      ${souAdmin ? `<div class="card-painel" data-ir="config"><div class="card-painel-icone">🏷️</div><div class="card-painel-titulo">Legendas / Códigos de Plantão</div><div class="card-painel-desc">O que cada sigla significa</div></div>` : ""}
+    </div>
+  `;
+  conteudo.querySelectorAll("[data-ir]").forEach(c => { c.onclick = () => irPara(c.dataset.ir); });
+}
+
+function renderMenuEscalas() {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `
+    <div class="cabecalho-lista"><h2>Escalas</h2></div>
+    <div class="grade-cards">
+      <div class="card-painel" data-ir="excel"><div class="card-painel-icone">📊</div><div class="card-painel-titulo">Importar Excel</div></div>
+      <div class="card-painel" data-ir="gerar"><div class="card-painel-icone">🔁</div><div class="card-painel-titulo">Gerar Escala</div></div>
+      <div class="card-painel" data-ir="visualizar"><div class="card-painel-icone">🖨️</div><div class="card-painel-titulo">Visualizar / Imprimir</div></div>
+      <div class="card-painel desabilitado"><div class="card-painel-icone">✏️</div><div class="card-painel-titulo">Criar Escala Padrão</div><div class="card-painel-desc">Em breve</div></div>
+    </div>
+  `;
+  conteudo.querySelectorAll("[data-ir]").forEach(c => { c.onclick = () => irPara(c.dataset.ir); });
+}
+
+function renderAvisosPlaceholder() {
+  document.getElementById("conteudo").innerHTML = `
+    <div class="cabecalho-lista"><h2>Avisos e Lembretes</h2></div>
+    <div class="vazio">Nenhum aviso no momento — essa funcionalidade completa (notificações, prazos, lido/não lido) vem numa próxima etapa.</div>
+  `;
 }
 
 let listaCodigosPlantao = [];
@@ -560,7 +674,7 @@ async function salvarFuncionario(overlay, editando) {
 
 async function excluirFuncionario(id) {
   const alvo = listaUsuarios.find(u => u.id === id);
-  if (!confirm(`Excluir ${alvo ? alvo.nome : "este funcionário"}? Essa ação não pode ser desfeita.`)) return;
+  if (!confirm(`Excluir ${alvo ? alvo.nome : "este funcionário"}? Isso também apaga o histórico de escala dele. Essa ação não pode ser desfeita.`)) return;
   try {
     await api(`/usuarios/${id}`, { method: "DELETE" });
     await renderFuncionarios();
