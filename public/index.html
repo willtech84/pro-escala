@@ -681,8 +681,8 @@ function processarLinhasFuncionarios() {
   const linhasDados = funcImportLinhas.slice(funcImportCabecalhoIdx + 1);
   funcImportRegistros = linhasDados
     .map(l => ({
-      nomeDetectado: String(l[colNome] ?? "").trim(),
-      especialidade: colEsp !== undefined ? String(l[colEsp] ?? "").trim() : "",
+      nomeDetectado: corrigirCodificacao(String(l[colNome] ?? "").trim()),
+      especialidade: colEsp !== undefined ? corrigirCodificacao(String(l[colEsp] ?? "").trim()) : "",
       crm: colCrm !== undefined ? String(l[colCrm] ?? "").trim() : "",
     }))
     .filter(r => r.nomeDetectado)
@@ -1060,6 +1060,58 @@ function normalizarTexto(s) {
   return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
+// Corrige o mojibake clássico de UTF-8 lido como Latin-1 (ex: "JÃ©ssica" -> "Jéssica"),
+// comum em planilhas que passaram por uma exportação/importação de CSV mal configurada.
+function corrigirCodificacao(texto) {
+  if (typeof texto !== "string" || !/Ã[\x80-\xBF]|Â[\x80-\xBF]/.test(texto)) return texto;
+  try {
+    return decodeURIComponent(escape(texto));
+  } catch {
+    return texto;
+  }
+}
+
+// Tenta ler a célula como um intervalo de horário direto (ex: "07 AS 11", "07 às 11",
+// "11 AS 15 TC"). Se bater, não precisa de dicionário de códigos — o horário já está ali.
+function parseIntervaloHorario(valor) {
+  const m = String(valor).trim().match(/^(\d{1,2})\s*(?:as|às|-)\s*(\d{1,2})\s*(.*)$/i);
+  if (!m) return null;
+  const hi = Number(m[1]), hf = Number(m[2]);
+  if (hi > 23 || hf > 23) return null;
+  const horaInicio = String(hi).padStart(2, "0") + ":00";
+  const horaFim = String(hf).padStart(2, "0") + ":00";
+  const extra = m[3].trim();
+  return { horaInicio, horaFim, extra };
+}
+
+// Detecta se a grade está "invertida" (dias nas linhas, funcionário nas colunas) e,
+// se sim, devolve a matriz já reorganizada no formato que o restante do código espera
+// (funcionário nas linhas, dia nas colunas) -- assim nao precisamos duplicar logica.
+function detectarEReorganizarGradeInvertida(linhas, cabecalhoIdx) {
+  const cabecalho = linhas[cabecalhoIdx] || [];
+  const primeiraLinhaDados = linhas[cabecalhoIdx + 1] || [];
+  const rotuloCol0 = normalizarTexto(cabecalho[0]);
+  const pareceRotuloData = rotuloCol0.includes("data") || rotuloCol0.includes("dia");
+  const primeiraCelulaPareceDia = /^\d{1,2}\b/.test(String(primeiraLinhaDados[0] ?? "").trim());
+  if (!pareceRotuloData || !primeiraCelulaPareceDia) return null; // nao esta invertida, segue o fluxo normal
+
+  const bloco = linhas.slice(cabecalhoIdx);
+  const numColunas = Math.max(...bloco.map(l => l.length));
+  const diasExtraidos = bloco.slice(1).map(l => {
+    const m = String(l[0] ?? "").match(/\d{1,2}/);
+    return m ? m[0] : "";
+  });
+  const novoCabecalho = ["Nome", ...diasExtraidos];
+  const novasLinhas = [novoCabecalho];
+  for (let col = 1; col < numColunas; col++) {
+    const nome = corrigirCodificacao(String(bloco[0][col] ?? "").trim());
+    if (!nome) continue;
+    const valores = bloco.slice(1).map(l => l[col] ?? "");
+    novasLinhas.push([nome, ...valores]);
+  }
+  return novasLinhas;
+}
+
 function serialExcelParaDataISO(serial) {
   const utcDias = Math.floor(serial - 25569);
   const data = new Date(utcDias * 86400 * 1000);
@@ -1174,9 +1226,17 @@ function processarArquivoExcel(file) {
       if (!excelLinhas.length) throw new Error("Planilha vazia.");
       excelLinhaCabecalhoIdx = detectarCabecalho(excelLinhas);
       dzTexto.textContent = "📊 Clique para escolher outra planilha";
+      let avisoInversao = "";
       if (formatoExcel === "grade") {
+        const reorganizada = detectarEReorganizarGradeInvertida(excelLinhas, excelLinhaCabecalhoIdx);
+        if (reorganizada) {
+          excelLinhas = reorganizada;
+          excelLinhaCabecalhoIdx = 0;
+          avisoInversao = `<div class="msg ok">Detectei que os dias estavam nas linhas — reorganizei automaticamente pra funcionário nas linhas e dia nas colunas.</div>`;
+        }
         excelMapeamentoGrade = detectarMapeamentoGrade(excelLinhas[excelLinhaCabecalhoIdx]);
         renderMapeamentoGrade();
+        if (avisoInversao) document.getElementById("area-mapeamento").insertAdjacentHTML("afterbegin", avisoInversao);
       } else {
         excelMapeamento = detectarMapeamento(excelLinhas[excelLinhaCabecalhoIdx]);
         renderMapeamento();
@@ -1242,7 +1302,7 @@ function processarLinhasExcel() {
   const linhasDados = excelLinhas.slice(excelLinhaCabecalhoIdx + 1);
   registrosExcel = linhasDados
     .map(l => ({
-      nomeDetectado: String(l[colNome] ?? "").trim(),
+      nomeDetectado: corrigirCodificacao(String(l[colNome] ?? "").trim()),
       data: colData !== undefined ? parseCelulaData(l[colData]) : "",
       horaInicio: colHoraInicio !== undefined ? parseCelulaHora(l[colHoraInicio]) : "",
       horaFim: colHoraFim !== undefined ? parseCelulaHora(l[colHoraFim]) : "",
@@ -1408,12 +1468,25 @@ function processarLinhasGrade() {
   const linhasDados = excelLinhas.slice(excelLinhaCabecalhoIdx + 1);
   gruposGrade = linhasDados
     .map(l => {
-      const nome = String(l[colNome] ?? "").trim();
+      const nome = corrigirCodificacao(String(l[colNome] ?? "").trim());
       if (!nome) return null;
       const entradasDia = colsDia
         .map(({ idx, dia }) => {
           const valor = String(l[idx] ?? "").trim();
           if (!valor) return null;
+
+          const intervalo = parseIntervaloHorario(valor);
+          if (intervalo) {
+            return {
+              data: `${excelGradeMesAno}-${String(dia).padStart(2, "0")}`,
+              codigo: valor,
+              tipo: intervalo.extra ? `${intervalo.horaInicio}–${intervalo.horaFim} (${intervalo.extra})` : `${intervalo.horaInicio}–${intervalo.horaFim}`,
+              horaInicio: intervalo.horaInicio,
+              horaFim: intervalo.horaFim,
+              desconhecido: false,
+            };
+          }
+
           const siglaNorm = valor.toUpperCase().replace(/°/g, "º");
           const codigoInfo = listaCodigosPlantao.find(c => c.sigla.toUpperCase().replace(/°/g, "º") === siglaNorm);
           return {
@@ -1429,7 +1502,7 @@ function processarLinhasGrade() {
       if (!entradasDia.length) return null;
       return {
         nomeDetectado: nome,
-        especialidade: colEsp !== undefined ? String(l[colEsp] ?? "").trim() : "",
+        especialidade: colEsp !== undefined ? corrigirCodificacao(String(l[colEsp] ?? "").trim()) : "",
         crm: colCrm !== undefined ? String(l[colCrm] ?? "").trim() : "",
         usuarioId: encontrarUsuarioPorNome(nome),
         setorId: usuarioAtual.role === "gestor_setor" ? usuarioAtual.setorId : (listaSetores[0]?.id || ""),
