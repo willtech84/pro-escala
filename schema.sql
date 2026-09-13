@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
     tipo_escala_id INTEGER REFERENCES tipos_escala(id),
     especialidade TEXT,
     crm TEXT,
+    horario_fixo_inicio TEXT, -- HH:MM, se definido vale pra dias úteis e não muda ao gerar escala
+    horario_fixo_fim TEXT,
     status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'bloqueado')),
     criado_em TEXT DEFAULT (datetime('now'))
 );

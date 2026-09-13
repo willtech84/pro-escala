@@ -442,6 +442,42 @@ async function carregarDados() {
   listaCodigosPlantao = c.codigos;
 }
 
+let funcionariosSelecionados = new Set();
+
+function linhaFuncionarioHTML(u) {
+  const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
+  const escalaNome = (id) => listaTiposEscala.find(t => t.id === id)?.nome || "—";
+  const horarioFixo = (u.horarioFixoInicio && u.horarioFixoFim) ? `${u.horarioFixoInicio}–${u.horarioFixoFim}` : "—";
+  return `
+    <tr>
+      <td><input type="checkbox" class="check-func" data-id="${u.id}" ${funcionariosSelecionados.has(u.id) ? "checked" : ""} /></td>
+      <td>${u.nome}</td>
+      <td>${u.especialidade || "—"}</td>
+      <td>${u.role}</td>
+      <td>${setorNome(u.setorId)}</td>
+      <td>${escalaNome(u.tipoEscalaId)}</td>
+      <td>${horarioFixo}</td>
+      <td><span class="status-tag ${u.status}">${u.status}</span></td>
+      <td class="acoes">
+        <button class="secundario" data-editar="${u.id}">Editar</button>
+        ${usuarioAtual.role === "admin" && u.id !== usuarioAtual.id ? `<button class="perigo" data-excluir="${u.id}">Excluir</button>` : ""}
+      </td>
+    </tr>
+  `;
+}
+
+function ligarEventosLinhasFuncionarios(tbody) {
+  tbody.querySelectorAll(".check-func").forEach(chk => {
+    chk.onchange = () => {
+      const id = Number(chk.dataset.id);
+      if (chk.checked) funcionariosSelecionados.add(id); else funcionariosSelecionados.delete(id);
+      renderBarraAcoesLote();
+    };
+  });
+  tbody.querySelectorAll("[data-editar]").forEach(b => { b.onclick = () => abrirModalFuncionario(Number(b.dataset.editar)); });
+  tbody.querySelectorAll("[data-excluir]").forEach(b => { b.onclick = () => excluirFuncionario(Number(b.dataset.excluir)); });
+}
+
 async function renderFuncionarios(filtro = "") {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = `<div class="vazio">Carregando...</div>`;
@@ -451,15 +487,13 @@ async function renderFuncionarios(filtro = "") {
     conteudo.innerHTML = `<div class="msg erro">Erro ao carregar: ${e.message}</div>`;
     return;
   }
+  funcionariosSelecionados = new Set([...funcionariosSelecionados].filter(id => listaUsuarios.some(u => u.id === id)));
 
   const podeCriarSetor = usuarioAtual.role === "admin";
   const termo = filtro.trim().toLowerCase();
   const filtrados = listaUsuarios.filter(u =>
     !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
   );
-
-  const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
-  const escalaNome = (id) => listaTiposEscala.find(t => t.id === id)?.nome || "—";
 
   conteudo.innerHTML = `
     <div class="cabecalho-lista">
@@ -479,25 +513,11 @@ async function renderFuncionarios(filtro = "") {
         : listaSetores.map(s => `<span class="setor-chip">${s.nome}</span>`).join("")}
     </div>
     <div id="feedback-setor"></div>
+    <div id="area-acoes-lote"></div>
     ${filtrados.length === 0 ? `<div class="vazio">Nenhum funcionário encontrado.</div>` : `
     <table>
-      <thead><tr><th>Nome</th><th>Especialidade</th><th>Papel</th><th>Setor</th><th>Escala</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-        ${filtrados.map(u => `
-          <tr>
-            <td>${u.nome}</td>
-            <td>${u.especialidade || "—"}</td>
-            <td>${u.role}</td>
-            <td>${setorNome(u.setorId)}</td>
-            <td>${escalaNome(u.tipoEscalaId)}</td>
-            <td><span class="status-tag ${u.status}">${u.status}</span></td>
-            <td class="acoes">
-              <button class="secundario" data-editar="${u.id}">Editar</button>
-              ${usuarioAtual.role === "admin" && u.id !== usuarioAtual.id ? `<button class="perigo" data-excluir="${u.id}">Excluir</button>` : ""}
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
+      <thead><tr><th><input type="checkbox" id="check-todos" /></th><th>Nome</th><th>Especialidade</th><th>Papel</th><th>Setor</th><th>Escala</th><th>Horário Fixo</th><th>Status</th><th></th></tr></thead>
+      <tbody id="tbody-funcionarios">${filtrados.map(linhaFuncionarioHTML).join("")}</tbody>
     </table>`}
   `;
 
@@ -507,12 +527,73 @@ async function renderFuncionarios(filtro = "") {
   const btnSetor = document.getElementById("btn-novo-setor");
   if (btnSetor) btnSetor.onclick = criarSetorPrompt;
 
-  conteudo.querySelectorAll("[data-editar]").forEach(b => {
-    b.onclick = () => abrirModalFuncionario(Number(b.dataset.editar));
-  });
-  conteudo.querySelectorAll("[data-excluir]").forEach(b => {
-    b.onclick = () => excluirFuncionario(Number(b.dataset.excluir));
-  });
+  const checkTodos = document.getElementById("check-todos");
+  if (checkTodos) {
+    checkTodos.checked = filtrados.length > 0 && filtrados.every(u => funcionariosSelecionados.has(u.id));
+    checkTodos.onchange = () => {
+      filtrados.forEach(u => { if (checkTodos.checked) funcionariosSelecionados.add(u.id); else funcionariosSelecionados.delete(u.id); });
+      renderFuncionariosLocal(filtro);
+      renderBarraAcoesLote();
+    };
+  }
+  const tbody = document.getElementById("tbody-funcionarios");
+  if (tbody) ligarEventosLinhasFuncionarios(tbody);
+  renderBarraAcoesLote();
+}
+
+function renderBarraAcoesLote() {
+  const area = document.getElementById("area-acoes-lote");
+  if (!area) return;
+  const n = funcionariosSelecionados.size;
+  if (!n) { area.innerHTML = ""; return; }
+  area.innerHTML = `
+    <div class="grupo-grade-card">
+      <div class="grupo-grade-cabecalho" style="margin-bottom:0;">
+        <strong>${n} selecionado(s)</strong>
+        <select id="lote-tipo-escala" style="max-width:220px">
+          <option value="">Aplicar padrão de escala...</option>
+          ${listaTiposEscala.map(t => `<option value="${t.id}">${t.nome}</option>`).join("")}
+        </select>
+        <button class="secundario" id="btn-aplicar-tipo-escala">Aplicar</button>
+        <span style="border-left:1px solid #334155; height:24px;"></span>
+        <span style="font-size:12.5px; color:#94a3b8;">Horário fixo diário:</span>
+        <input id="lote-hora-inicio" placeholder="HH:MM" style="width:75px" />
+        <span>–</span>
+        <input id="lote-hora-fim" placeholder="HH:MM" style="width:75px" />
+        <button class="secundario" id="btn-aplicar-horario-fixo">Aplicar</button>
+        <button class="secundario" id="btn-limpar-horario-fixo">Limpar horário fixo</button>
+        <button class="secundario" id="btn-limpar-selecao">Limpar seleção</button>
+      </div>
+      <div id="feedback-lote" style="margin-top:10px;"></div>
+    </div>
+  `;
+  document.getElementById("btn-limpar-selecao").onclick = () => { funcionariosSelecionados.clear(); renderFuncionarios(document.getElementById("busca")?.value || ""); };
+  document.getElementById("btn-aplicar-tipo-escala").onclick = () => aplicarEmLote({ tipoEscalaId: Number(document.getElementById("lote-tipo-escala").value) || null }, "padrão de escala");
+  document.getElementById("btn-aplicar-horario-fixo").onclick = () => {
+    const hi = document.getElementById("lote-hora-inicio").value.trim();
+    const hf = document.getElementById("lote-hora-fim").value.trim();
+    if (!hi || !hf) { document.getElementById("feedback-lote").innerHTML = `<div class="msg erro">Preencha início e fim.</div>`; return; }
+    aplicarEmLote({ horarioFixoInicio: hi, horarioFixoFim: hf }, "horário fixo");
+  };
+  document.getElementById("btn-limpar-horario-fixo").onclick = () => aplicarEmLote({ horarioFixoInicio: "", horarioFixoFim: "" }, "horário fixo removido");
+}
+
+async function aplicarEmLote(body, rotulo) {
+  const fb = document.getElementById("feedback-lote");
+  fb.innerHTML = `<div class="vazio">Aplicando...</div>`;
+  let ok = 0;
+  const falhas = [];
+  for (const id of funcionariosSelecionados) {
+    try {
+      await api(`/usuarios/${id}`, { method: "PUT", body: JSON.stringify(body) });
+      ok++;
+    } catch (e) {
+      falhas.push(e.message);
+    }
+  }
+  fb.innerHTML = `<div class="msg ok">${rotulo} aplicado a ${ok} funcionário(s).</div>` + (falhas.length ? `<div class="msg erro">${falhas.length} falha(s).</div>` : "");
+  await carregarDados();
+  renderFuncionariosLocal(document.getElementById("busca")?.value || "");
 }
 
 // re-render so filtragem sem bater na API de novo
@@ -522,8 +603,6 @@ function renderFuncionariosLocal(filtro) {
   const filtrados = listaUsuarios.filter(u =>
     !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
   );
-  const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
-  const escalaNome = (id) => listaTiposEscala.find(t => t.id === id)?.nome || "—";
   const tbody = conteudo.querySelector("tbody");
   const tabela = conteudo.querySelector("table");
   const h2 = conteudo.querySelector("h2");
@@ -534,26 +613,10 @@ function renderFuncionariosLocal(filtro) {
     return;
   }
   if (!tabela) { renderFuncionarios(filtro); return; }
-  tbody.innerHTML = filtrados.map(u => `
-    <tr>
-      <td>${u.nome}</td>
-      <td>${u.especialidade || "—"}</td>
-      <td>${u.role}</td>
-      <td>${setorNome(u.setorId)}</td>
-      <td>${escalaNome(u.tipoEscalaId)}</td>
-      <td><span class="status-tag ${u.status}">${u.status}</span></td>
-      <td class="acoes">
-        <button class="secundario" data-editar="${u.id}">Editar</button>
-        ${usuarioAtual.role === "admin" && u.id !== usuarioAtual.id ? `<button class="perigo" data-excluir="${u.id}">Excluir</button>` : ""}
-      </td>
-    </tr>
-  `).join("");
-  conteudo.querySelectorAll("[data-editar]").forEach(b => {
-    b.onclick = () => abrirModalFuncionario(Number(b.dataset.editar));
-  });
-  conteudo.querySelectorAll("[data-excluir]").forEach(b => {
-    b.onclick = () => excluirFuncionario(Number(b.dataset.excluir));
-  });
+  tbody.innerHTML = filtrados.map(linhaFuncionarioHTML).join("");
+  ligarEventosLinhasFuncionarios(tbody);
+  const checkTodos = document.getElementById("check-todos");
+  if (checkTodos) checkTodos.checked = filtrados.length > 0 && filtrados.every(u => funcionariosSelecionados.has(u.id));
 }
 
 async function criarSetorPrompt() {
@@ -615,6 +678,12 @@ function abrirModalFuncionario(id) {
         <option value="">— não definido —</option>
         ${listaTiposEscala.map(t => `<option value="${t.id}" ${editando?.tipoEscalaId === t.id ? "selected" : ""}>${t.nome}</option>`).join("")}
       </select>
+      <label>Horário fixo diário (opcional — não muda ao gerar escala)</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="m-horario-fixo-inicio" placeholder="HH:MM" value="${editando?.horarioFixoInicio || ""}" style="width:90px" />
+        <span>–</span>
+        <input id="m-horario-fixo-fim" placeholder="HH:MM" value="${editando?.horarioFixoFim || ""}" style="width:90px" />
+      </div>
       ${editando ? `
         <label>Status</label>
         <select id="m-status">
@@ -650,7 +719,8 @@ async function salvarFuncionario(overlay, editando) {
     const tipoEscalaEl = document.getElementById("m-tipo-escala");
     const statusEl = document.getElementById("m-status");
 
-    const body = { nome, email, especialidade: document.getElementById("m-especialidade").value.trim(), crm: document.getElementById("m-crm").value.trim() };
+    const body = { nome, email, especialidade: document.getElementById("m-especialidade").value.trim(), crm: document.getElementById("m-crm").value.trim(),
+      horarioFixoInicio: document.getElementById("m-horario-fixo-inicio").value.trim(), horarioFixoFim: document.getElementById("m-horario-fixo-fim").value.trim() };
     if (senha) body.senha = senha;
     if (roleEl) body.role = roleEl.value;
     if (setorEl) body.setorId = setorEl.value ? Number(setorEl.value) : null;
@@ -979,6 +1049,19 @@ function gerarLancamentos(tipoEscala, dataIni, dataFim, opcoes) {
   return resultado;
 }
 
+// Horario fixo diario: mesmo horario toda semana util, nao gira. Fim de semana fica de fora
+// por enquanto -- o rodizio entre quem tem horario fixo e' uma etapa futura.
+function gerarLancamentosHorarioFixo(u, dataIni, dataFim) {
+  const dias = todasDatasEntre(dataIni, dataFim);
+  const resultado = [];
+  dias.forEach(data => {
+    const dow = new Date(data + "T12:00:00").getDay();
+    if (dow === 0 || dow === 6) return;
+    resultado.push({ data, horaInicio: u.horarioFixoInicio, horaFim: u.horarioFixoFim, tipo: "horário fixo" });
+  });
+  return resultado;
+}
+
 let registrosGeracao = [];
 let funcionarioGeracaoId = "";
 
@@ -990,21 +1073,23 @@ async function renderGerarEscala() {
       return;
     }
   }
-  const comPadrao = listaUsuarios.filter(u => u.tipoEscalaId);
+  const comPadrao = listaUsuarios.filter(u => u.tipoEscalaId || (u.horarioFixoInicio && u.horarioFixoFim));
   const hoje = new Date();
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 
   conteudo.innerHTML = `
     <div class="cabecalho-lista"><h2>Gerar Escala a partir do Padrão</h2></div>
     <div class="aviso-modo">
-      Escolha o funcionário e o mês — o sistema sugere os lançamentos com base no padrão de escala dele.
+      Escolha o funcionário e o mês — o sistema sugere os lançamentos com base no padrão de escala dele
+      (ou no horário fixo diário, se ele tiver um definido — nesse caso o horário fixo tem prioridade e
+      vale pra dias úteis; fim de semana em rodízio ainda não está automatizado, fica de fora por enquanto).
       Revise e ajuste antes de confirmar; a lógica de rotação é uma sugestão, não uma regra fixa.
     </div>
-    ${comPadrao.length === 0 ? `<div class="vazio">Nenhum funcionário tem padrão de escala definido ainda. Defina em "Funcionários" → Editar.</div>` : `
+    ${comPadrao.length === 0 ? `<div class="vazio">Nenhum funcionário tem padrão de escala ou horário fixo definido ainda. Defina em "Funcionários" → Editar.</div>` : `
     <label>Funcionário</label>
     <select id="g-funcionario" style="max-width:320px">
       <option value="">selecione</option>
-      ${comPadrao.map(u => `<option value="${u.id}">${u.nome} — ${listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || ""}</option>`).join("")}
+      ${comPadrao.map(u => `<option value="${u.id}">${u.nome} — ${(u.horarioFixoInicio && u.horarioFixoFim) ? `horário fixo ${u.horarioFixoInicio}–${u.horarioFixoFim}` : (listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || "")}</option>`).join("")}
     </select>
     <label>Mês</label>
     <input type="month" id="g-mes" value="${mesAtual}" style="max-width:180px" />
@@ -1024,6 +1109,10 @@ async function renderGerarEscala() {
 function renderOpcoesGeracao(usuarioId) {
   const area = document.getElementById("g-opcoes");
   const u = listaUsuarios.find(x => x.id === usuarioId);
+  if (u && u.horarioFixoInicio && u.horarioFixoFim) {
+    area.innerHTML = `<div class="aviso-modo" style="margin-top:14px;">Horário fixo diário (${u.horarioFixoInicio}–${u.horarioFixoFim}) será usado de segunda a sexta. Sem opções extras — é sempre o mesmo horário.</div>`;
+    return;
+  }
   const tipo = u ? listaTiposEscala.find(t => t.id === u.tipoEscalaId) : null;
   if (!tipo) { area.innerHTML = ""; return; }
 
@@ -1084,7 +1173,7 @@ async function gerarSugestao() {
     document.getElementById("g-substituir").onclick = async () => {
       try {
         await api(`/escalas?userId=${usuarioId}&de=${dataIni}&ate=${dataFim}`, { method: "DELETE" });
-        montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes);
+        montarRevisaoGeracao(u, tipo, dataIni, dataFim, opcoes);
       } catch (e) {
         fb.innerHTML = `<div class="msg erro">Erro ao substituir: ${e.message}</div>`;
       }
@@ -1093,12 +1182,14 @@ async function gerarSugestao() {
   }
 
   fb.innerHTML = "";
-  montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes);
+  montarRevisaoGeracao(u, tipo, dataIni, dataFim, opcoes);
 }
 
-function montarRevisaoGeracao(usuarioId, tipo, dataIni, dataFim, opcoes) {
-  funcionarioGeracaoId = usuarioId;
-  registrosGeracao = gerarLancamentos(tipo, dataIni, dataFim, opcoes);
+function montarRevisaoGeracao(u, tipo, dataIni, dataFim, opcoes) {
+  funcionarioGeracaoId = u.id;
+  registrosGeracao = (u.horarioFixoInicio && u.horarioFixoFim)
+    ? gerarLancamentosHorarioFixo(u, dataIni, dataFim)
+    : gerarLancamentos(tipo, dataIni, dataFim, opcoes);
   renderTabelaGeracao();
 }
 

@@ -57,6 +57,8 @@ function semSenha(u) {
     tipoEscalaId: u.tipo_escala_id,
     especialidade: u.especialidade,
     crm: u.crm,
+    horarioFixoInicio: u.horario_fixo_inicio,
+    horarioFixoFim: u.horario_fixo_fim,
     status: u.status,
     criadoEm: u.criado_em,
   };
@@ -147,7 +149,7 @@ async function handleApi(req, env, url) {
 
   // GET /usuarios — admin ve todos; rh ve todos; gestor_setor ve so do proprio setor
   if (path === "/usuarios" && method === "GET") {
-    let query = "SELECT id, nome, email, role, setor_id, tipo_escala_id, especialidade, crm, status, criado_em FROM users";
+    let query = "SELECT id, nome, email, role, setor_id, tipo_escala_id, especialidade, crm, horario_fixo_inicio, horario_fixo_fim, status, criado_em FROM users";
     let stmt;
     if (usuario.role === "gestor_setor") {
       stmt = env.DB.prepare(query + " WHERE setor_id = ? ORDER BY nome").bind(usuario.setor_id);
@@ -216,6 +218,8 @@ async function handleApi(req, env, url) {
     if (body.tipoEscalaId !== undefined) { campos.push("tipo_escala_id = ?"); valores.push(body.tipoEscalaId || null); }
     if (typeof body.especialidade === "string") { campos.push("especialidade = ?"); valores.push(body.especialidade.trim() || null); }
     if (typeof body.crm === "string") { campos.push("crm = ?"); valores.push(body.crm.trim() || null); }
+    if (body.horarioFixoInicio !== undefined) { campos.push("horario_fixo_inicio = ?"); valores.push(body.horarioFixoInicio || null); }
+    if (body.horarioFixoFim !== undefined) { campos.push("horario_fixo_fim = ?"); valores.push(body.horarioFixoFim || null); }
     if (usuario.role === "admin") {
       if (typeof body.role === "string" && ROLES.includes(body.role)) { campos.push("role = ?"); valores.push(body.role); }
       if (body.setorId !== undefined) { campos.push("setor_id = ?"); valores.push(body.setorId); }
