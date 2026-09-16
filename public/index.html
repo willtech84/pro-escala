@@ -24,6 +24,12 @@
     background: #0f172a; color: #e2e8f0; font-size: 14px;
   }
   input:focus, select:focus { outline: 2px solid var(--cor-primaria); border-color: transparent; }
+  input[type="checkbox"] {
+    width: 20px; height: 20px; min-width: 20px; padding: 0; appearance: none; -webkit-appearance: none;
+    border: 2px solid #475569; border-radius: 5px; background: #0f172a; cursor: pointer; vertical-align: middle;
+  }
+  input[type="checkbox"]:checked { background: var(--cor-primaria); border-color: var(--cor-primaria); }
+  input[type="checkbox"]:focus { outline: 2px solid var(--cor-primaria-clara); outline-offset: 1px; }
   button {
     padding: 10px 16px; border: none; border-radius: 8px;
     background: var(--cor-primaria); color: white; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -132,7 +138,7 @@
     #area-imprimir-escala { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
     #area-imprimir-escala h3 { font-size: 13px; margin: 0 0 2px; }
     #area-imprimir-escala p { font-size: 9px; margin: 0 0 6px; }
-    .wrapper-tabela-escala { overflow: visible; border: none; }
+    .wrapper-tabela-escala { overflow: visible; border: none; transform: none !important; }
     .tabela-funcao-dia { font-size: 6.5px; width: 100%; table-layout: fixed; }
     .tabela-funcao-dia th, .tabela-funcao-dia td { border-color: #999; color: #000; padding: 2px 1px; overflow: hidden; text-overflow: ellipsis; }
     .tabela-funcao-dia thead th { background: #eee; color: #000; }
@@ -308,14 +314,17 @@ async function renderShell() {
     </header>
     ${podeGerenciarFuncionarios && telaAtual !== "dashboard" ? `
     <nav class="breadcrumb">
-      <button id="btn-painel">← Painel</button>
+      <button id="btn-voltar">← Voltar</button>
+      <button class="secundario" id="btn-painel">🏠 Painel</button>
       <span class="breadcrumb-atual">${ROTULOS_TELA[telaAtual] || ""}</span>
     </nav>` : ""}
     <main class="conteudo" id="conteudo"></main>
   `;
   document.getElementById("sair").onclick = sair;
   const btnPainel = document.getElementById("btn-painel");
-  if (btnPainel) btnPainel.onclick = () => { telaAtual = "dashboard"; renderShell(); };
+  if (btnPainel) btnPainel.onclick = irParaPainel;
+  const btnVoltar = document.getElementById("btn-voltar");
+  if (btnVoltar) btnVoltar.onclick = voltarTela;
 
   if (!podeGerenciarFuncionarios) {
     document.getElementById("conteudo").innerHTML = `
@@ -343,7 +352,21 @@ const ROTULOS_TELA = {
   gerar: "Gerar Escala", visualizar: "Visualizar Escala", config: "Configurações",
 };
 
-function irPara(tela) { telaAtual = tela; renderShell(); }
+let historicoTelas = [];
+function irPara(tela) {
+  if (telaAtual !== tela) historicoTelas.push(telaAtual);
+  telaAtual = tela;
+  renderShell();
+}
+function voltarTela() {
+  telaAtual = historicoTelas.pop() || "dashboard";
+  renderShell();
+}
+function irParaPainel() {
+  historicoTelas = [];
+  telaAtual = "dashboard";
+  renderShell();
+}
 
 async function renderDashboard() {
   const souAdmin = usuarioAtual.role === "admin";
@@ -443,6 +466,17 @@ async function carregarDados() {
 }
 
 let funcionariosSelecionados = new Set();
+let filtroSetorFunc = "";
+let filtroEscalaFunc = "";
+
+function aplicarFiltrosFuncionarios(termo) {
+  const t = termo.trim().toLowerCase();
+  return listaUsuarios.filter(u =>
+    (!t || u.nome.toLowerCase().includes(t) || u.email.toLowerCase().includes(t)) &&
+    (!filtroSetorFunc || u.setorId === Number(filtroSetorFunc)) &&
+    (!filtroEscalaFunc || u.tipoEscalaId === Number(filtroEscalaFunc))
+  );
+}
 
 function linhaFuncionarioHTML(u) {
   const setorNome = (id) => listaSetores.find(s => s.id === id)?.nome || "—";
@@ -490,16 +524,21 @@ async function renderFuncionarios(filtro = "") {
   funcionariosSelecionados = new Set([...funcionariosSelecionados].filter(id => listaUsuarios.some(u => u.id === id)));
 
   const podeCriarSetor = usuarioAtual.role === "admin";
-  const termo = filtro.trim().toLowerCase();
-  const filtrados = listaUsuarios.filter(u =>
-    !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
-  );
+  const filtrados = aplicarFiltrosFuncionarios(filtro);
 
   conteudo.innerHTML = `
     <div class="cabecalho-lista">
       <h2>Funcionários (${listaUsuarios.length})</h2>
-      <div style="display:flex; gap:10px; align-items:center;">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input id="busca" placeholder="Buscar por nome ou e-mail" value="${filtro}" />
+        <select id="filtro-setor" style="max-width:160px">
+          <option value="">Todos os setores</option>
+          ${listaSetores.map(s => `<option value="${s.id}" ${filtroSetorFunc == s.id ? "selected" : ""}>${s.nome}</option>`).join("")}
+        </select>
+        <select id="filtro-escala" style="max-width:180px">
+          <option value="">Todas as escalas</option>
+          ${listaTiposEscala.map(t => `<option value="${t.id}" ${filtroEscalaFunc == t.id ? "selected" : ""}>${t.nome}</option>`).join("")}
+        </select>
         ${podeCriarSetor ? `<button class="secundario" id="btn-novo-setor">+ Setor</button>` : ""}
         <button class="secundario" id="btn-importar-func">Importar planilha</button>
         <button id="btn-novo-func">+ Funcionário</button>
@@ -522,6 +561,8 @@ async function renderFuncionarios(filtro = "") {
   `;
 
   document.getElementById("busca").oninput = (e) => renderFuncionariosLocal(e.target.value);
+  document.getElementById("filtro-setor").onchange = (e) => { filtroSetorFunc = e.target.value; renderFuncionariosLocal(document.getElementById("busca").value); };
+  document.getElementById("filtro-escala").onchange = (e) => { filtroEscalaFunc = e.target.value; renderFuncionariosLocal(document.getElementById("busca").value); };
   document.getElementById("btn-novo-func").onclick = () => abrirModalFuncionario(null);
   document.getElementById("btn-importar-func").onclick = toggleImportarFuncionarios;
   const btnSetor = document.getElementById("btn-novo-setor");
@@ -598,11 +639,8 @@ async function aplicarEmLote(body, rotulo) {
 
 // re-render so filtragem sem bater na API de novo
 function renderFuncionariosLocal(filtro) {
-  const termo = filtro.trim().toLowerCase();
   const conteudo = document.getElementById("conteudo");
-  const filtrados = listaUsuarios.filter(u =>
-    !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
-  );
+  const filtrados = aplicarFiltrosFuncionarios(filtro);
   const tbody = conteudo.querySelector("tbody");
   const tabela = conteudo.querySelector("table");
   const h2 = conteudo.querySelector("h2");
@@ -1065,6 +1103,8 @@ function gerarLancamentosHorarioFixo(u, dataIni, dataFim) {
 let registrosGeracao = [];
 let funcionarioGeracaoId = "";
 
+let modoGeracao = "individual";
+
 async function renderGerarEscala() {
   const conteudo = document.getElementById("conteudo");
   if (!listaUsuarios.length) {
@@ -1076,34 +1116,174 @@ async function renderGerarEscala() {
   const comPadrao = listaUsuarios.filter(u => u.tipoEscalaId || (u.horarioFixoInicio && u.horarioFixoFim));
   const hoje = new Date();
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+  const souGestorSetor = usuarioAtual.role === "gestor_setor";
 
   conteudo.innerHTML = `
     <div class="cabecalho-lista"><h2>Gerar Escala a partir do Padrão</h2></div>
+    <div style="display:flex; gap:16px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:6px; margin:0;"><input type="radio" name="modo-geracao" value="individual" style="width:auto" ${modoGeracao === "individual" ? "checked" : ""} /> Um funcionário</label>
+      <label style="display:flex; align-items:center; gap:6px; margin:0;"><input type="radio" name="modo-geracao" value="lote" style="width:auto" ${modoGeracao === "lote" ? "checked" : ""} /> Em lote (por setor)</label>
+    </div>
     <div class="aviso-modo">
-      Escolha o funcionário e o mês — o sistema sugere os lançamentos com base no padrão de escala dele
-      (ou no horário fixo diário, se ele tiver um definido — nesse caso o horário fixo tem prioridade e
-      vale pra dias úteis; fim de semana em rodízio ainda não está automatizado, fica de fora por enquanto).
+      O sistema sugere os lançamentos com base no padrão de escala de cada um (ou no horário fixo diário,
+      que tem prioridade e vale pra dias úteis — fim de semana em rodízio ainda não é automático).
       Revise e ajuste antes de confirmar; a lógica de rotação é uma sugestão, não uma regra fixa.
     </div>
-    ${comPadrao.length === 0 ? `<div class="vazio">Nenhum funcionário tem padrão de escala ou horário fixo definido ainda. Defina em "Funcionários" → Editar.</div>` : `
-    <label>Funcionário</label>
-    <select id="g-funcionario" style="max-width:320px">
-      <option value="">selecione</option>
-      ${comPadrao.map(u => `<option value="${u.id}">${u.nome} — ${(u.horarioFixoInicio && u.horarioFixoFim) ? `horário fixo ${u.horarioFixoInicio}–${u.horarioFixoFim}` : (listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || "")}</option>`).join("")}
-    </select>
-    <label>Mês</label>
-    <input type="month" id="g-mes" value="${mesAtual}" style="max-width:180px" />
-    <div id="g-opcoes"></div>
-    <div style="margin-top:16px;"><button id="g-gerar">Gerar sugestão</button></div>
-    <div id="g-feedback" style="margin-top:14px;"></div>
-    <div id="g-revisao"></div>
-    `}
+    <div id="area-modo-geracao"></div>
   `;
-  if (comPadrao.length === 0) return;
+  document.querySelectorAll('input[name="modo-geracao"]').forEach(r => {
+    r.onchange = () => { modoGeracao = r.value; renderModoGeracao(); };
+  });
+  renderModoGeracao();
+
+  function renderModoGeracao() {
+    if (modoGeracao === "lote") renderGeracaoEmLote();
+    else renderGeracaoIndividual();
+  }
+
+  function renderGeracaoIndividual() {
+    const area = document.getElementById("area-modo-geracao");
+    area.innerHTML = `
+      ${comPadrao.length === 0 ? `<div class="vazio">Nenhum funcionário tem padrão de escala ou horário fixo definido ainda. Defina em "Funcionários" → Editar.</div>` : `
+      <label>Funcionário</label>
+      <select id="g-funcionario" style="max-width:320px">
+        <option value="">selecione</option>
+        ${comPadrao.map(u => `<option value="${u.id}">${u.nome} — ${(u.horarioFixoInicio && u.horarioFixoFim) ? `horário fixo ${u.horarioFixoInicio}–${u.horarioFixoFim}` : (listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || "")}</option>`).join("")}
+      </select>
+      <label>Mês</label>
+      <input type="month" id="g-mes" value="${mesAtual}" style="max-width:180px" />
+      <div id="g-opcoes"></div>
+      <div style="margin-top:16px;"><button id="g-gerar">Gerar sugestão</button></div>
+      <div id="g-feedback" style="margin-top:14px;"></div>
+      <div id="g-revisao"></div>
+      `}
+    `;
+    if (comPadrao.length === 0) return;
 
   const selFunc = document.getElementById("g-funcionario");
   selFunc.onchange = () => renderOpcoesGeracao(Number(selFunc.value));
   document.getElementById("g-gerar").onclick = gerarSugestao;
+  }
+
+  function renderGeracaoEmLote() {
+    const area = document.getElementById("area-modo-geracao");
+    area.innerHTML = `
+      <label>Setor</label>
+      <select id="lote-setor" style="max-width:220px" ${souGestorSetor ? "disabled" : ""}>
+        ${souGestorSetor
+          ? `<option value="${usuarioAtual.setorId}">${listaSetores.find(s => s.id === usuarioAtual.setorId)?.nome || ""}</option>`
+          : `<option value="">selecione</option>` + listaSetores.map(s => `<option value="${s.id}">${s.nome}</option>`).join("")}
+      </select>
+      <label>Mês</label>
+      <input type="month" id="lote-mes" value="${mesAtual}" style="max-width:180px" />
+      <div id="lote-funcionarios" style="margin-top:16px;"></div>
+      <div id="lote-feedback" style="margin-top:14px;"></div>
+      <div id="lote-resultado"></div>
+    `;
+    const selSetor = document.getElementById("lote-setor");
+    const atualizarLista = () => {
+      const setorId = Number(selSetor.value);
+      const elegiveis = comPadrao.filter(u => u.setorId === setorId);
+      const areaLista = document.getElementById("lote-funcionarios");
+      if (!setorId) { areaLista.innerHTML = ""; return; }
+      if (!elegiveis.length) { areaLista.innerHTML = `<div class="vazio">Ninguém nesse setor tem padrão de escala ou horário fixo definido.</div>`; return; }
+      areaLista.innerHTML = `
+        <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="lote-todos" style="width:auto" /> Selecionar todos (${elegiveis.length})</label>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px; max-height:280px; overflow-y:auto;">
+          ${elegiveis.map(u => `
+            <label style="display:flex; align-items:center; gap:8px; font-size:13.5px;">
+              <input type="checkbox" class="lote-check" data-id="${u.id}" style="width:auto" />
+              ${u.nome} — ${(u.horarioFixoInicio && u.horarioFixoFim) ? `horário fixo ${u.horarioFixoInicio}–${u.horarioFixoFim}` : (listaTiposEscala.find(t => t.id === u.tipoEscalaId)?.nome || "")}
+            </label>
+          `).join("")}
+        </div>
+        <div style="margin-top:14px;"><button id="lote-gerar">Gerar para selecionados</button></div>
+      `;
+      document.getElementById("lote-todos").onchange = (e) => {
+        document.querySelectorAll(".lote-check").forEach(c => { c.checked = e.target.checked; });
+      };
+      document.getElementById("lote-gerar").onclick = () => gerarEmLotePorSetor(elegiveis);
+    };
+    if (souGestorSetor) atualizarLista();
+    selSetor.onchange = atualizarLista;
+  }
+}
+
+function coletarSelecionadosLote(elegiveis) {
+  const ids = [...document.querySelectorAll(".lote-check:checked")].map(c => Number(c.dataset.id));
+  return elegiveis.filter(u => ids.includes(u.id));
+}
+
+async function gerarEmLotePorSetor(elegiveis) {
+  const selecionados = coletarSelecionadosLote(elegiveis);
+  const fb = document.getElementById("lote-feedback");
+  const mes = document.getElementById("lote-mes").value;
+  if (!selecionados.length) { fb.innerHTML = `<div class="msg erro">Selecione ao menos um funcionário.</div>`; return; }
+  if (!mes) { fb.innerHTML = `<div class="msg erro">Escolha o mês.</div>`; return; }
+
+  const [ano, mesNum] = mes.split("-").map(Number);
+  const dataIni = `${mes}-01`;
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+  const dataFim = `${mes}-${String(ultimoDia).padStart(2, "0")}`;
+
+  fb.innerHTML = `<div class="vazio">Gerando para ${selecionados.length} funcionário(s)...</div>`;
+  const resultados = [];
+  for (const u of selecionados) {
+    try {
+      const existentes = await api(`/escalas?userId=${u.id}&de=${dataIni}&ate=${dataFim}`);
+      if (existentes.escalas.length) { resultados.push({ u, status: "pulado", motivo: `já tem ${existentes.escalas.length} lançamento(s) nesse mês` }); continue; }
+      const tipo = listaTiposEscala.find(t => t.id === u.tipoEscalaId);
+      const registros = (u.horarioFixoInicio && u.horarioFixoFim)
+        ? gerarLancamentosHorarioFixo(u, dataIni, dataFim)
+        : gerarLancamentos(tipo, dataIni, dataFim, { diaFolgaIndex: 6, comecaFolgando: false, iniciaSabado: false });
+      resultados.push({ u, status: "pronto", registros });
+    } catch (e) {
+      resultados.push({ u, status: "erro", motivo: e.message });
+    }
+  }
+  fb.innerHTML = "";
+  renderResultadoLote(resultados);
+}
+
+function renderResultadoLote(resultados) {
+  const area = document.getElementById("lote-resultado");
+  area.innerHTML = `
+    <div class="cabecalho-lista" style="margin-top:20px;"><h2 style="font-size:16px;">Resultado (${resultados.length})</h2></div>
+    <table class="tabela-revisao">
+      <thead><tr><th>Funcionário</th><th>Status</th><th>Lançamentos</th></tr></thead>
+      <tbody>
+        ${resultados.map(r => `
+          <tr>
+            <td>${r.u.nome}</td>
+            <td>${r.status === "pronto" ? "Pronto pra salvar" : r.status === "pulado" ? "Pulado" : "Erro"}</td>
+            <td>${r.status === "pronto" ? r.registros.length : (r.motivo || "")}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div id="lote-feedback-final" style="margin-top:14px;"></div>
+    <div style="margin-top:14px;"><button id="lote-confirmar">Confirmar e salvar todos os prontos</button></div>
+  `;
+  document.getElementById("lote-confirmar").onclick = () => confirmarLote(resultados);
+}
+
+async function confirmarLote(resultados) {
+  const fb = document.getElementById("lote-feedback-final");
+  const prontos = resultados.filter(r => r.status === "pronto");
+  if (!prontos.length) { fb.innerHTML = `<div class="msg erro">Nada pronto pra salvar.</div>`; return; }
+  fb.innerHTML = `<div class="vazio">Salvando...</div>`;
+  let totalInseridos = 0;
+  const falhas = [];
+  for (const r of prontos) {
+    try {
+      const registros = r.registros.map(x => ({ usuarioId: r.u.id, data: x.data, horaInicio: x.horaInicio, horaFim: x.horaFim, tipo: x.tipo }));
+      const resp = await api("/escalas/lote", { method: "POST", body: JSON.stringify({ registros, origem: "padrao" }) });
+      totalInseridos += resp.inseridos;
+    } catch (e) {
+      falhas.push(`${r.u.nome}: ${e.message}`);
+    }
+  }
+  fb.innerHTML = `<div class="msg ok">${totalInseridos} lançamento(s) salvos no total.</div>` + (falhas.length ? `<div class="msg erro">${falhas.length} falha(s): ${falhas.join(", ")}</div>` : "");
 }
 
 function renderOpcoesGeracao(usuarioId) {
@@ -1214,7 +1394,7 @@ function renderTabelaGeracao() {
   registrosGeracao.forEach((r, i) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><input data-campo="data" data-i="${i}" value="${r.data}" style="width:110px" /></td>
+      <td><input data-campo="data" data-i="${i}" value="${isoParaBr(r.data)}" placeholder="DD/MM/AAAA" style="width:105px" /></td>
       <td><input data-campo="horaInicio" data-i="${i}" value="${r.horaInicio}" style="width:70px" /></td>
       <td><input data-campo="horaFim" data-i="${i}" value="${r.horaFim}" style="width:70px" /></td>
       <td><input data-campo="tipo" data-i="${i}" value="${r.tipo}" style="width:120px" /></td>
@@ -1223,7 +1403,7 @@ function renderTabelaGeracao() {
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll("[data-campo]").forEach(el => {
-    el.onchange = () => { registrosGeracao[Number(el.dataset.i)][el.dataset.campo] = el.value; };
+    el.onchange = () => { registrosGeracao[Number(el.dataset.i)][el.dataset.campo] = el.dataset.campo === "data" ? brParaIso(el.value) : el.value; };
   });
   tbody.querySelectorAll("[data-remover]").forEach(b => {
     b.onclick = () => { registrosGeracao.splice(Number(b.dataset.remover), 1); renderTabelaGeracao(); };
@@ -1260,6 +1440,15 @@ const DICIONARIO_COLUNAS = {
   especialidade: ["especialidade", "setor", "area", "servico"],
   crm: ["crm", "registro", "cro", "conselho", "coren"],
 };
+
+function isoParaBr(iso) {
+  const m = String(iso ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || "");
+}
+function brParaIso(br) {
+  const m = String(br ?? "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+}
 
 function normalizarTexto(s) {
   return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -1557,7 +1746,7 @@ function renderTabelaRevisaoExcel() {
         </select>
       </td>
       <td><select data-campo="setorId" data-i="${i}" style="${r.usuarioId ? "visibility:hidden" : ""}"><option value="">selecione</option>${opcoesSetores}</select></td>
-      <td><input data-campo="data" data-i="${i}" value="${r.data}" placeholder="AAAA-MM-DD" style="width:105px" /></td>
+      <td><input data-campo="data" data-i="${i}" value="${isoParaBr(r.data)}" placeholder="DD/MM/AAAA" style="width:105px" /></td>
       <td><input data-campo="horaInicio" data-i="${i}" value="${r.horaInicio}" placeholder="HH:MM" style="width:65px" /></td>
       <td><input data-campo="horaFim" data-i="${i}" value="${r.horaFim}" placeholder="HH:MM" style="width:65px" /></td>
       <td><input data-campo="tipo" data-i="${i}" value="${r.tipo}" style="width:90px" /></td>
@@ -1570,7 +1759,7 @@ function renderTabelaRevisaoExcel() {
 
   tbody.querySelectorAll("[data-campo]").forEach(el => {
     el.onchange = () => {
-      registrosExcel[Number(el.dataset.i)][el.dataset.campo] = el.value;
+      registrosExcel[Number(el.dataset.i)][el.dataset.campo] = el.dataset.campo === "data" ? brParaIso(el.value) : el.value;
       if (el.dataset.campo === "usuarioId") renderTabelaRevisaoExcel();
     };
   });
@@ -2144,7 +2333,10 @@ async function renderCodigosPlantao() {
   };
 }
 
-/* ---------- Visualizar / Imprimir Escala (função x dia = nome) ---------- */
+/* ---------- Visualizar / Imprimir Escala (horário x dia = nome) ---------- */
+let estadoVisualizacao = null; // guarda dados carregados p/ filtrar sem rebuscar
+let zoomEscala = 1;
+
 async function renderVisualizarEscala() {
   const conteudo = document.getElementById("conteudo");
   if (!listaUsuarios.length) {
@@ -2179,6 +2371,20 @@ async function renderVisualizarEscala() {
   document.getElementById("v-carregar").onclick = carregarVisualizacaoEscala;
 }
 
+// Extrai o horário "limpo" (HH:MM–HH:MM) de um tipo tipo "11:00–15:00 (TC)",
+// separando a anotação extra -- assim "11:00–15:00" e "11:00–15:00 (TC)" caem
+// na MESMA linha da tabela, e a anotação aparece só junto do nome na célula.
+function chaveLinhaEExtra(tipoTexto) {
+  const t = (tipoTexto || "").trim();
+  const m = t.match(/^(\d{2}:\d{2}–\d{2}:\d{2})(?:\s*\((.*)\))?$/);
+  if (m) return { chave: m[1], extra: m[2] || "" };
+  return { chave: t || "Sem horário definido", extra: "" };
+}
+function infoOrdenacaoLinha(chave) {
+  const m = chave.match(/^(\d{2}):(\d{2})–/);
+  return m ? { horario: true, minutos: Number(m[1]) * 60 + Number(m[2]) } : { horario: false, minutos: 0 };
+}
+
 async function carregarVisualizacaoEscala() {
   const area = document.getElementById("v-resultado");
   const souGestorSetor = usuarioAtual.role === "gestor_setor";
@@ -2207,42 +2413,94 @@ async function carregarVisualizacaoEscala() {
     return;
   }
 
-  // agrupa por funcao (campo "tipo", ou "Sem função definida" se vazio) x dia
-  const funcoes = [...new Set(escalas.map(e => e.tipo && e.tipo.trim() ? e.tipo.trim() : "Sem função definida"))].sort();
-  const nomeSetor = souGestorSetor ? (listaSetores.find(s => s.id === usuarioAtual.setorId)?.nome || "") : (listaSetores.find(s => s.id === setorId)?.nome || "");
-
-  const grade = {}; // funcao -> { dia -> [nomes] }
-  funcoes.forEach(f => { grade[f] = {}; });
+  const grade = {}; // chave (horario ou codigo) -> { dia -> [nomes] }
   escalas.forEach(e => {
-    const funcao = e.tipo && e.tipo.trim() ? e.tipo.trim() : "Sem função definida";
+    const { chave, extra } = chaveLinhaEExtra(e.tipo);
     const dia = Number(e.data.slice(8, 10));
-    if (!grade[funcao][dia]) grade[funcao][dia] = [];
-    grade[funcao][dia].push(e.usuario_nome);
+    if (!grade[chave]) grade[chave] = {};
+    if (!grade[chave][dia]) grade[chave][dia] = [];
+    grade[chave][dia].push(extra ? `${e.usuario_nome} (${extra})` : e.usuario_nome);
   });
 
+  const linhas = Object.keys(grade).sort((a, b) => {
+    const ia = infoOrdenacaoLinha(a), ib = infoOrdenacaoLinha(b);
+    if (ia.horario && ib.horario) return ia.minutos - ib.minutos;
+    if (ia.horario !== ib.horario) return ia.horario ? -1 : 1;
+    return a.localeCompare(b);
+  });
+
+  const nomeSetor = souGestorSetor ? (listaSetores.find(s => s.id === usuarioAtual.setorId)?.nome || "") : (listaSetores.find(s => s.id === setorId)?.nome || "");
   const dias = Array.from({ length: ultimoDia }, (_, i) => i + 1);
 
+  estadoVisualizacao = { grade, linhas, dias, mes, nomeSetor };
+  renderTabelaVisualizacao("");
+}
+
+function renderTabelaVisualizacao(filtro) {
+  const area = document.getElementById("v-resultado");
+  const { grade, linhas, dias, mes, nomeSetor } = estadoVisualizacao;
+  const termo = filtro.trim().toLowerCase();
+  const linhasVisiveis = !termo ? linhas : linhas.filter(l =>
+    l.toLowerCase().includes(termo) || dias.some(d => (grade[l][d] || []).some(n => n.toLowerCase().includes(termo)))
+  );
+
   area.innerHTML = `
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+      <input id="v-filtro" placeholder="Filtrar por horário, código ou nome..." value="${filtro}" style="max-width:280px" />
+      <span style="border-left:1px solid #334155; height:22px;"></span>
+      <button class="secundario" id="v-zoom-menos">−</button>
+      <span id="v-zoom-label" style="font-size:12.5px; color:#94a3b8; min-width:40px; text-align:center;">100%</span>
+      <button class="secundario" id="v-zoom-mais">+</button>
+      <button class="secundario" id="v-zoom-ajustar">Ajustar à tela</button>
+    </div>
     <div id="area-imprimir-escala">
       <h3 style="margin:0 0 4px;">${appConfig.nome_instituicao || "Pro-Escala"} — ${nomeSetor}</h3>
       <p style="margin:0 0 14px; color:#94a3b8; font-size:13px;">Escala de ${mes}</p>
-      <div class="wrapper-tabela-escala">
+      <div class="wrapper-tabela-escala" id="wrapper-zoom" style="transform-origin: top left;">
         <table class="tabela-funcao-dia">
-          <thead><tr><th class="col-funcao">Função</th>${dias.map(d => `<th>${String(d).padStart(2, "0")}</th>`).join("")}</tr></thead>
+          <thead><tr><th class="col-funcao">Horário</th>${dias.map(d => `<th>${String(d).padStart(2, "0")}</th>`).join("")}</tr></thead>
           <tbody>
-            ${funcoes.map(f => `
+            ${linhasVisiveis.length ? linhasVisiveis.map(l => `
               <tr>
-                <td class="col-funcao">${f}</td>
-                ${dias.map(d => `<td>${(grade[f][d] || []).join(", ")}</td>`).join("")}
+                <td class="col-funcao">${l}</td>
+                ${dias.map(d => `<td>${(grade[l][d] || []).join(", ")}</td>`).join("")}
               </tr>
-            `).join("")}
+            `).join("") : `<tr><td class="col-funcao" colspan="${dias.length + 1}">Nenhuma linha bate com o filtro.</td></tr>`}
           </tbody>
         </table>
       </div>
     </div>
   `;
+  document.getElementById("v-filtro").oninput = (e) => renderTabelaVisualizacao(e.target.value);
+  document.getElementById("v-zoom-menos").onclick = () => ajustarZoom(-0.1);
+  document.getElementById("v-zoom-mais").onclick = () => ajustarZoom(0.1);
+  document.getElementById("v-zoom-ajustar").onclick = ajustarZoomParaCaber;
   document.getElementById("v-btn-imprimir-wrap").innerHTML = `<button id="v-imprimir">Imprimir / Exportar PDF</button>`;
   document.getElementById("v-imprimir").onclick = () => window.print();
+
+  requestAnimationFrame(ajustarZoomParaCaber);
+}
+
+function ajustarZoom(delta) {
+  zoomEscala = Math.max(0.4, Math.min(2, Math.round((zoomEscala + delta) * 10) / 10));
+  aplicarZoomAtual();
+}
+function ajustarZoomParaCaber() {
+  const wrapper = document.getElementById("wrapper-zoom");
+  if (!wrapper) return;
+  wrapper.style.transform = "scale(1)";
+  const tabela = wrapper.querySelector("table");
+  const container = wrapper.parentElement;
+  if (!tabela || !container) return;
+  const disponivel = container.clientWidth - 4;
+  zoomEscala = tabela.scrollWidth > disponivel ? Math.max(0.4, disponivel / tabela.scrollWidth) : 1;
+  aplicarZoomAtual();
+}
+function aplicarZoomAtual() {
+  const wrapper = document.getElementById("wrapper-zoom");
+  if (wrapper) wrapper.style.transform = `scale(${zoomEscala})`;
+  const label = document.getElementById("v-zoom-label");
+  if (label) label.textContent = Math.round(zoomEscala * 100) + "%";
 }
 
 iniciar();
