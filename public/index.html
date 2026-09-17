@@ -62,7 +62,10 @@
   .linha-setores { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -6px 0 16px; }
   .linha-setores-label { font-size: 12px; color: #64748b; }
   .linha-setores-vazio { font-size: 12.5px; color: #64748b; font-style: italic; }
-  .setor-chip { background: #334155; color: #cbd5e1; padding: 3px 11px; border-radius: 999px; font-size: 12.5px; }
+  .setor-chip { background: #334155; color: #cbd5e1; padding: 3px 11px; border-radius: 999px; font-size: 12.5px; cursor: pointer; transition: background .12s; }
+  .setor-chip:hover { background: #3f4f68; }
+  .setor-chip-ativo { background: var(--cor-primaria); color: #fff; }
+  .setor-chip-limpar { background: transparent; border: 1px solid #475569; color: #94a3b8; }
 
   nav.abas { display: flex; gap: 4px; padding: 0 24px; background: #1e293b; border-bottom: 1px solid #334155; }
   nav.abas .aba {
@@ -549,7 +552,8 @@ async function renderFuncionarios(filtro = "") {
       <span class="linha-setores-label">Setores:</span>
       ${listaSetores.length === 0
         ? `<span class="linha-setores-vazio">nenhum setor cadastrado ainda</span>`
-        : listaSetores.map(s => `<span class="setor-chip">${s.nome}</span>`).join("")}
+        : listaSetores.map(s => `<span class="setor-chip ${filtroSetorFunc == s.id ? "setor-chip-ativo" : ""}" data-chip-setor="${s.id}">${s.nome}</span>`).join("")}
+      ${filtroSetorFunc ? `<span class="setor-chip setor-chip-limpar" data-chip-setor="">Limpar filtro ×</span>` : ""}
     </div>
     <div id="feedback-setor"></div>
     <div id="area-acoes-lote"></div>
@@ -561,7 +565,16 @@ async function renderFuncionarios(filtro = "") {
   `;
 
   document.getElementById("busca").oninput = (e) => renderFuncionariosLocal(e.target.value);
-  document.getElementById("filtro-setor").onchange = (e) => { filtroSetorFunc = e.target.value; renderFuncionariosLocal(document.getElementById("busca").value); };
+  document.getElementById("filtro-setor").onchange = (e) => { filtroSetorFunc = e.target.value; renderFuncionariosLocal(document.getElementById("busca").value); atualizarEstadoChipsSetor(); };
+  conteudo.querySelectorAll("[data-chip-setor]").forEach(chip => {
+    chip.onclick = () => {
+      filtroSetorFunc = chip.dataset.chipSetor;
+      const selFiltro = document.getElementById("filtro-setor");
+      if (selFiltro) selFiltro.value = filtroSetorFunc;
+      renderFuncionariosLocal(document.getElementById("busca").value);
+      atualizarEstadoChipsSetor();
+    };
+  });
   document.getElementById("filtro-escala").onchange = (e) => { filtroEscalaFunc = e.target.value; renderFuncionariosLocal(document.getElementById("busca").value); };
   document.getElementById("btn-novo-func").onclick = () => abrirModalFuncionario(null);
   document.getElementById("btn-importar-func").onclick = toggleImportarFuncionarios;
@@ -580,6 +593,27 @@ async function renderFuncionarios(filtro = "") {
   const tbody = document.getElementById("tbody-funcionarios");
   if (tbody) ligarEventosLinhasFuncionarios(tbody);
   renderBarraAcoesLote();
+}
+
+function atualizarEstadoChipsSetor() {
+  const container = document.querySelector(".linha-setores");
+  if (!container) return;
+  container.innerHTML = `
+    <span class="linha-setores-label">Setores:</span>
+    ${listaSetores.length === 0
+      ? `<span class="linha-setores-vazio">nenhum setor cadastrado ainda</span>`
+      : listaSetores.map(s => `<span class="setor-chip ${filtroSetorFunc == s.id ? "setor-chip-ativo" : ""}" data-chip-setor="${s.id}">${s.nome}</span>`).join("")}
+    ${filtroSetorFunc ? `<span class="setor-chip setor-chip-limpar" data-chip-setor="">Limpar filtro ×</span>` : ""}
+  `;
+  container.querySelectorAll("[data-chip-setor]").forEach(chip => {
+    chip.onclick = () => {
+      filtroSetorFunc = chip.dataset.chipSetor;
+      const selFiltro = document.getElementById("filtro-setor");
+      if (selFiltro) selFiltro.value = filtroSetorFunc;
+      renderFuncionariosLocal(document.getElementById("busca").value);
+      atualizarEstadoChipsSetor();
+    };
+  });
 }
 
 function renderBarraAcoesLote() {
@@ -603,6 +637,7 @@ function renderBarraAcoesLote() {
         <input id="lote-hora-fim" placeholder="HH:MM" style="width:75px" />
         <button class="secundario" id="btn-aplicar-horario-fixo">Aplicar</button>
         <button class="secundario" id="btn-limpar-horario-fixo">Limpar horário fixo</button>
+        ${usuarioAtual.role === "admin" ? `<button class="perigo" id="btn-excluir-lote">Excluir selecionados</button>` : ""}
         <button class="secundario" id="btn-limpar-selecao">Limpar seleção</button>
       </div>
       <div id="feedback-lote" style="margin-top:10px;"></div>
@@ -617,6 +652,31 @@ function renderBarraAcoesLote() {
     aplicarEmLote({ horarioFixoInicio: hi, horarioFixoFim: hf }, "horário fixo");
   };
   document.getElementById("btn-limpar-horario-fixo").onclick = () => aplicarEmLote({ horarioFixoInicio: "", horarioFixoFim: "" }, "horário fixo removido");
+  const btnExcluirLote = document.getElementById("btn-excluir-lote");
+  if (btnExcluirLote) btnExcluirLote.onclick = excluirFuncionariosLote;
+}
+
+async function excluirFuncionariosLote() {
+  const n = funcionariosSelecionados.size;
+  const nomes = [...funcionariosSelecionados].map(id => listaUsuarios.find(u => u.id === id)?.nome).filter(Boolean);
+  if (!confirm(`Excluir ${n} funcionário(s) selecionado(s)${nomes.length ? " (" + nomes.slice(0, 5).join(", ") + (nomes.length > 5 ? "..." : "") + ")" : ""}? Isso também apaga o histórico de escala deles. Essa ação não pode ser desfeita.`)) return;
+  const fb = document.getElementById("feedback-lote");
+  fb.innerHTML = `<div class="vazio">Excluindo...</div>`;
+  let ok = 0;
+  const falhas = [];
+  for (const id of [...funcionariosSelecionados]) {
+    if (id === usuarioAtual.id) { falhas.push("você não pode excluir a si mesmo"); continue; }
+    try {
+      await api(`/usuarios/${id}`, { method: "DELETE" });
+      ok++;
+    } catch (e) {
+      falhas.push(e.message);
+    }
+  }
+  funcionariosSelecionados.clear();
+  fb.innerHTML = `<div class="msg ok">${ok} funcionário(s) excluído(s).</div>` + (falhas.length ? `<div class="msg erro">${falhas.length} falha(s): ${falhas.join(", ")}</div>` : "");
+  await carregarDados();
+  await renderFuncionarios(document.getElementById("busca")?.value || "");
 }
 
 async function aplicarEmLote(body, rotulo) {
@@ -1231,7 +1291,7 @@ async function gerarEmLotePorSetor(elegiveis) {
   for (const u of selecionados) {
     try {
       const existentes = await api(`/escalas?userId=${u.id}&de=${dataIni}&ate=${dataFim}`);
-      if (existentes.escalas.length) { resultados.push({ u, status: "pulado", motivo: `já tem ${existentes.escalas.length} lançamento(s) nesse mês` }); continue; }
+      if (existentes.escalas.length) { resultados.push({ u, status: "pulado", motivo: `já tem ${existentes.escalas.length} lançamento(s) nesse mês`, existentes: existentes.escalas, dataIni, dataFim }); continue; }
       const tipo = listaTiposEscala.find(t => t.id === u.tipoEscalaId);
       const registros = (u.horarioFixoInicio && u.horarioFixoFim)
         ? gerarLancamentosHorarioFixo(u, dataIni, dataFim)
@@ -1250,14 +1310,16 @@ function renderResultadoLote(resultados) {
   area.innerHTML = `
     <div class="cabecalho-lista" style="margin-top:20px;"><h2 style="font-size:16px;">Resultado (${resultados.length})</h2></div>
     <table class="tabela-revisao">
-      <thead><tr><th>Funcionário</th><th>Status</th><th>Lançamentos</th></tr></thead>
+      <thead><tr><th>Funcionário</th><th>Status</th><th>Lançamentos</th><th></th></tr></thead>
       <tbody>
-        ${resultados.map(r => `
+        ${resultados.map((r, i) => `
           <tr>
             <td>${r.u.nome}</td>
             <td>${r.status === "pronto" ? "Pronto pra salvar" : r.status === "pulado" ? "Pulado" : "Erro"}</td>
             <td>${r.status === "pronto" ? r.registros.length : (r.motivo || "")}</td>
+            <td>${r.status === "pulado" ? `<button class="secundario" data-ver-existentes="${i}">Ver / excluir</button>` : ""}</td>
           </tr>
+          ${r.status === "pulado" ? `<tr id="detalhe-existentes-${i}" style="display:none;"><td colspan="4"></td></tr>` : ""}
         `).join("")}
       </tbody>
     </table>
@@ -1265,6 +1327,48 @@ function renderResultadoLote(resultados) {
     <div style="margin-top:14px;"><button id="lote-confirmar">Confirmar e salvar todos os prontos</button></div>
   `;
   document.getElementById("lote-confirmar").onclick = () => confirmarLote(resultados);
+  area.querySelectorAll("[data-ver-existentes]").forEach(btn => {
+    btn.onclick = () => {
+      const i = Number(btn.dataset.verExistentes);
+      const r = resultados[i];
+      const linhaDetalhe = document.getElementById(`detalhe-existentes-${i}`);
+      const jaAberta = linhaDetalhe.style.display !== "none";
+      if (jaAberta) { linhaDetalhe.style.display = "none"; return; }
+      linhaDetalhe.style.display = "";
+      linhaDetalhe.querySelector("td").innerHTML = `
+        <div style="padding:10px 0;">
+          <table class="tabela-revisao" style="margin-bottom:10px;">
+            <thead><tr><th>Data</th><th>Início</th><th>Fim</th><th>Tipo</th><th>Origem</th></tr></thead>
+            <tbody>
+              ${r.existentes.map(e => `<tr><td>${isoParaBr(e.data)}</td><td>${e.hora_inicio}</td><td>${e.hora_fim}</td><td>${e.tipo || ""}</td><td>${e.origem}</td></tr>`).join("")}
+            </tbody>
+          </table>
+          <button class="perigo" data-excluir-existentes="${i}">Excluir estes ${r.existentes.length} lançamento(s) e gerar de novo</button>
+          <span id="feedback-excluir-existentes-${i}" style="margin-left:10px;"></span>
+        </div>
+      `;
+      linhaDetalhe.querySelector(`[data-excluir-existentes="${i}"]`).onclick = () => excluirEGerarNovamente(i, resultados);
+    };
+  });
+}
+
+async function excluirEGerarNovamente(i, resultados) {
+  const r = resultados[i];
+  const fb = document.getElementById(`feedback-excluir-existentes-${i}`);
+  if (!confirm(`Excluir ${r.existentes.length} lançamento(s) de ${r.u.nome} nesse período e gerar de novo pelo padrão?`)) return;
+  fb.textContent = "Excluindo...";
+  try {
+    await api(`/escalas?userId=${r.u.id}&de=${r.dataIni}&ate=${r.dataFim}`, { method: "DELETE" });
+    const tipo = listaTiposEscala.find(t => t.id === r.u.tipoEscalaId);
+    const registros = (r.u.horarioFixoInicio && r.u.horarioFixoFim)
+      ? gerarLancamentosHorarioFixo(r.u, r.dataIni, r.dataFim)
+      : gerarLancamentos(tipo, r.dataIni, r.dataFim, { diaFolgaIndex: 6, comecaFolgando: false, iniciaSabado: false });
+    r.status = "pronto";
+    r.registros = registros;
+    renderResultadoLote(resultados);
+  } catch (e) {
+    fb.textContent = "Erro: " + e.message;
+  }
 }
 
 async function confirmarLote(resultados) {
@@ -2434,6 +2538,7 @@ async function carregarVisualizacaoEscala() {
 
   estadoVisualizacao = { grade, linhas, dias, mes, nomeSetor };
   renderTabelaVisualizacao("");
+  ajustarZoomParaCaber();
 }
 
 function renderTabelaVisualizacao(filtro) {
@@ -2489,6 +2594,8 @@ function ajustarZoomParaCaber() {
   const wrapper = document.getElementById("wrapper-zoom");
   if (!wrapper) return;
   wrapper.style.transform = "scale(1)";
+  wrapper.style.width = "auto";
+  wrapper.style.height = "auto";
   const tabela = wrapper.querySelector("table");
   const container = wrapper.parentElement;
   if (!tabela || !container) return;
@@ -2498,7 +2605,19 @@ function ajustarZoomParaCaber() {
 }
 function aplicarZoomAtual() {
   const wrapper = document.getElementById("wrapper-zoom");
-  if (wrapper) wrapper.style.transform = `scale(${zoomEscala})`;
+  if (!wrapper) return;
+  const tabela = wrapper.querySelector("table");
+  // guarda o tamanho natural (sem zoom) uma vez, pra nao ficar encolhendo em cascata
+  if (tabela && !wrapper.dataset.larguraNatural) {
+    wrapper.style.transform = "none";
+    wrapper.dataset.larguraNatural = tabela.scrollWidth;
+    wrapper.dataset.alturaNatural = tabela.scrollHeight;
+  }
+  wrapper.style.transform = `scale(${zoomEscala})`;
+  if (wrapper.dataset.larguraNatural) {
+    wrapper.style.width = (Number(wrapper.dataset.larguraNatural) * zoomEscala) + "px";
+    wrapper.style.height = (Number(wrapper.dataset.alturaNatural) * zoomEscala) + "px";
+  }
   const label = document.getElementById("v-zoom-label");
   if (label) label.textContent = Math.round(zoomEscala * 100) + "%";
 }

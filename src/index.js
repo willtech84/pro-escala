@@ -359,19 +359,24 @@ async function handleApi(req, env, url) {
     return json({ inseridos, falhas });
   }
 
-  // DELETE /escalas?userId=&de=&ate= — remove lancamentos de origem 'padrao' num periodo (usado ao regerar a escala)
+  // DELETE /escalas?userId=&de=&ate=&origem= — remove lancamentos num periodo. Se 'origem' vier,
+  // filtra so' por ela (usado ao regerar a partir do padrao); sem 'origem', apaga tudo no periodo
+  // (usado quando o usuario revisa e decide excluir manualmente antes de gerar de novo).
   if (path === "/escalas" && method === "DELETE") {
     if (!["admin", "rh", "gestor_setor"].includes(usuario.role)) return erro("Sem permissao.", 403);
     const userId = Number(url.searchParams.get("userId"));
     const de = url.searchParams.get("de");
     const ate = url.searchParams.get("ate");
+    const origem = url.searchParams.get("origem");
     if (!userId || !de || !ate) return erro("Informe userId, de e ate.");
     const alvo = await env.DB.prepare("SELECT id, setor_id FROM users WHERE id = ?").bind(userId).first();
     if (!alvo) return erro("Funcionario nao encontrado.", 404);
     if (usuario.role === "gestor_setor" && alvo.setor_id !== usuario.setor_id) return erro("Sem permissao.", 403);
-    const res = await env.DB.prepare(
-      "DELETE FROM escalas WHERE user_id = ? AND data >= ? AND data <= ? AND origem = 'padrao'"
-    ).bind(userId, de, ate).run();
+    const sql = origem
+      ? "DELETE FROM escalas WHERE user_id = ? AND data >= ? AND data <= ? AND origem = ?"
+      : "DELETE FROM escalas WHERE user_id = ? AND data >= ? AND data <= ?";
+    const binds = origem ? [userId, de, ate, origem] : [userId, de, ate];
+    const res = await env.DB.prepare(sql).bind(...binds).run();
     return json({ removidos: res.meta.changes });
   }
 
